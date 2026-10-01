@@ -72,6 +72,109 @@ function mountReveals() {
   items.forEach((el) => io.observe(el));
 }
 
+// Launch-notification signup. The form also works without JavaScript (it posts to the same endpoint);
+// this adds inline validation, a loading state, and the success panel, which appears only after the
+// server has accepted the request.
+const MSG = {
+  emailMissing: 'Shkruaje email adresën tënde.',
+  emailInvalid: 'Kjo nuk duket si email adresë e vlefshme. Shembull: emri@shembull.com',
+  consentMissing: 'Për me të lajmëru, duhet ta pranosh ruajtjen e emailit.',
+  generic: 'Diçka nuk shkoi si duhet. Provo përsëri pas pak.',
+  offline: 'Nuk ka lidhje me internetin. Kontrollo lidhjen dhe provo përsëri.',
+};
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@.]+(\.[^\s@.]+)+$/;
+
+function mountSignup(form) {
+  const email = form.querySelector('[name="email"]');
+  const consent = form.querySelector('[name="consent"]');
+  const button = form.querySelector('button[type="submit"]');
+  const formError = form.querySelector('[data-form-error]');
+  const done = document.querySelector('[data-signup-done]');
+  let busy = false;
+
+  const setError = (input, text) => {
+    const el = document.getElementById(input.getAttribute('aria-describedby'));
+    input.setAttribute('aria-invalid', text ? 'true' : 'false');
+    el.textContent = text || '';
+    el.hidden = !text;
+  };
+  const checkEmail = () => {
+    const v = email.value.trim();
+    const msg = !v ? MSG.emailMissing : (!EMAIL_RE.test(v) || v.length > 254) ? MSG.emailInvalid : '';
+    setError(email, msg);
+    return !msg;
+  };
+  const checkConsent = () => { setError(consent, consent.checked ? '' : MSG.consentMissing); return consent.checked; };
+  const showFormError = (text) => { formError.textContent = text || ''; formError.hidden = !text; };
+
+  // Validate a field once the visitor leaves it, then live while they fix it.
+  email.addEventListener('blur', () => { if (email.value.trim()) checkEmail(); });
+  email.addEventListener('input', () => { if (email.getAttribute('aria-invalid') === 'true') checkEmail(); });
+  consent.addEventListener('change', () => { if (consent.getAttribute('aria-invalid') === 'true') checkConsent(); });
+
+  const setBusy = (on) => {
+    busy = on;
+    button.disabled = on;
+    form.setAttribute('aria-busy', on ? 'true' : 'false');
+    form.classList.toggle('is-busy', on);
+  };
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (busy) return;                       // one request at a time
+    showFormError('');
+    const okEmail = checkEmail();
+    const okConsent = checkConsent();
+    if (!okEmail || !okConsent) { (okEmail ? consent : email).focus(); return; }
+
+    setBusy(true);
+    let res, data = {};
+    try {
+      res = await fetch(form.action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          email: email.value.trim(),
+          consent: consent.checked,
+          company_site: form.querySelector('[name="company_site"]').value,
+        }),
+      });
+      data = await res.json().catch(() => ({}));
+    } catch (e) {
+      // Network failure: keep everything the visitor typed so they can simply try again.
+      setBusy(false);
+      showFormError(navigator.onLine === false ? MSG.offline : MSG.generic);
+      return;
+    }
+    setBusy(false);
+
+    if (res.ok && data.ok) {
+      form.hidden = true;
+      done.hidden = false;
+      done.focus();
+      return;
+    }
+    if (data.errors) {
+      if (data.errors.email) setError(email, data.errors.email);
+      if (data.errors.consent) setError(consent, data.errors.consent);
+      (data.errors.email ? email : consent).focus();
+      return;
+    }
+    showFormError(data.message || MSG.generic);
+  });
+
+  // "Më lajmëroni" in the closing section: bring the form into view and put the cursor in the field.
+  document.querySelectorAll('[data-to-signup]').forEach((a) => a.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    const target = form.hidden ? done : email;
+    target.closest('.signup').scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+  }));
+}
+
+const signup = document.querySelector('[data-signup]');
+if (signup) mountSignup(signup);
+
 const stage = document.querySelector('[data-film]');
 if (stage) mountFilm(stage);
 mountReveals();

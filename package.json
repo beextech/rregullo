@@ -1,11 +1,20 @@
 {
   "name": "rregullo-site",
   "private": true,
-  "description": "Rregullo coming-soon website (static, no dependencies)",
+  "description": "Rregullo coming-soon website with launch-notification signup (Cloudflare Pages + Functions + D1)",
   "type": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "preview": "node scripts/build.mjs && python3 -m http.server 8788 --directory dist"
+    "dev": "node scripts/build.mjs && wrangler d1 migrations apply rregullo-launch --local && wrangler pages dev",
+    "db:migrate": "wrangler d1 migrations apply rregullo-launch --remote",
+    "test": "node scripts/test-flow.mjs",
+    "send-launch": "node scripts/send-launch.mjs",
+    "deploy": "node scripts/build.mjs && wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.146.0"
   }
 }

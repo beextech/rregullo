@@ -1,0 +1,20 @@
+# Cloudflare Pages project for rregullo.net. See README.md, "Deploy".
+name = "rregullo"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "dist"
+
+# Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL) are set with
+# `wrangler pages secret put` or in the dashboard, never here.
+[vars]
+SITE_URL = "https://rregullo.net"
+# The sender must be on a domain verified in Resend (see README). Change the mailbox name if you prefer.
+EMAIL_FROM = "Rregullo <njoftime@rregullo.net>"
+# 'confirmed' (one team email per confirmed signup) or 'all' (also when a signup is requested).
+LAUNCH_NOTIFY_ON = "confirmed"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "rregullo-launch"
+# Paste the id printed by `npx wrangler d1 create rregullo-launch --location=weur`.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

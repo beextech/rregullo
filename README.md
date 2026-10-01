@@ -1,126 +1,284 @@
-# Rregullo: coming-soon website
+# rregullo.net: coming-soon page with launch-email signup
 
-The public coming-soon page for Rregullo. It's a static site with no dependencies: plain HTML, CSS and a little JavaScript, plus a small Node build script that fills in the domain and social links.
+The public coming-soon page for Rregullo. Visitors can leave their email address to hear when Rregullo launches; the address only joins the list after they confirm it (double opt-in).
 
-Every brand asset comes from **Rregullo identity 2.4**:
+- **Front end:** static HTML, CSS and a little JavaScript, built from Rregullo identity 2.4.
+- **Back end:** Cloudflare Pages Functions, with a Cloudflare D1 (SQLite) database for the list.
+- **Email:** sent through [Resend](https://resend.com) over plain HTTPS. There's no SDK.
+- **Dependencies:** none at runtime. `wrangler` is the only dev dependency.
 
-| On the page | Source in the identity pack |
-|---|---|
-| Wordmark, the level O and the small logo (inline SVG) | `01-logo/svg`, `02-symbol-o/svg` (the paths are copied exactly) |
-| Hero film | `05-motion/rregullo-film_web_1920x1080_silent.mp4`, cropped to 4:3 and re-encoded |
-| Favicons, touch icon, manifest icons | `04-app-and-web` |
-| Share image | `04-app-and-web/og-image_1200x630.png` |
-| Colours (Ink, Paper, Vial lime) and Schibsted Grotesk | The identity README |
+> **Status: built and tested locally, not yet deployed.** Every flow below passes against the real Functions and a local D1 database, with a mock email API standing in for Resend (`npm test`). Real email delivery has **not** been tested: that needs the Resend account and DNS records in [Setup](#setup). After deploying, run the [live check](#live-check-after-deploying).
 
-## What's on the page
+## How it works
 
-1. **Header:** the small logo and a status pill that says *Së shpejti në Kosovë*.
-2. **Hero:** the eyebrow, the headline, the supporting line, the follow button (shown only once the Instagram URL is set) and the brand film.
-3. **Çka është Rregullo?:** what the platform is for, plus a line saying it is still being built.
-4. **Si ka me funksionu:** the three planned steps, under the label *Kur të jetë gati*, so nobody reads them as a live service.
-5. **Emri dhe shenja:** the level O and what it means, with the vision statement.
-6. **Finale:** the logo, *Ki diçka me rregullu? Rregullo po vjen. Na ndiq për lansimin.*, and the social links.
-
-The page makes no claims about launch dates, numbers, verification, prices or bookings. It never says *link në bio*, *regjistrohu tash* or *gjeje mjeshtrin tani*.
-
-## The hero film
-
-- **Format:** the 2.4 web cut, muted, cropped to 4:3. The first frame of the source is a render glitch (a black silhouette), so it is trimmed and replaced with a short fade from Ink.
-  - **MP4 (H.264), served first:** 0.27 MB on phones, 0.61 MB on desktop.
-  - **WebM (VP9):** used only by browsers that can't play the MP4.
-- **When it plays:** once, the first time the stage is at least half on screen. It pauses when scrolled away or when the tab is hidden.
-- **Hand-off:** at the end the video gives way to the inline SVG logo, which sits exactly where the film's last frame draws the logo (measured from the frame). The resting logo is vector and stays crisp at any size. A *Shiko sërish* button replays the film.
-- **No loop:** the brand guidelines say the film plays once and never loops. To loop it anyway, add `loop` to the `<video>` in `src/index.html`.
-- **No layout shift:** the stage is a fixed 4:3 box.
-- **Fallbacks:** each of these shows the static SVG logo and never downloads the video:
-  - reduced motion is on
-  - JavaScript is off
-  - autoplay is refused (for example in iOS Low Power Mode or with Data Saver); there *Shiko sërish* starts the film
-  - the video fails to load
-- **Sound:** none. The page never plays audio.
-
-## Configure
-
-Set these in `site.config.json`, or as environment variables (environment variables win):
-
-| Setting | Env variable | What it does |
-|---|---|---|
-| `siteUrl` | `SITE_URL` | The live domain, e.g. `https://rregullo.com`. Adds the canonical URL, an absolute share-image URL and `sitemap.xml`. |
-| `social.instagram` | `INSTAGRAM_URL` | The official profile, e.g. `https://www.instagram.com/<handle>/`. Turns on the hero button *Na ndiq për lansimin* and the Instagram link in the finale. |
-| `social.facebook`, `social.tiktok`, `social.linkedin` | `FACEBOOK_URL`, `TIKTOK_URL`, `LINKEDIN_URL` | Optional extra profiles, shown only when set. |
-
-The build refuses a social URL that isn't https, isn't on that network's own domain, or points at the network's home page. With no URL set, nothing is linked: there are no placeholders and no dead buttons.
-
-## Build and preview
-
-Requires Node 18 or later. There is nothing to install.
-
-```bash
-npm run build                      # writes dist/
-npm run preview                    # builds, then serves dist/ at http://localhost:8788
-INSTAGRAM_URL=https://www.instagram.com/<handle>/ SITE_URL=https://<domain> npm run build
+```
+Visitor ──► form (email + consent) ──► POST /api/subscribe
+                                         │ validate, honeypot, same-origin, rate limit
+                                         ▼
+                              D1: subscriber "pending" ──► Resend: "Konfirmo emailin" (link valid 48 h)
+                                                                     │
+Visitor clicks the link ──► /konfirmo?t=… (page) ──► POST /konfirmo ─┘
+                                         ▼
+                              D1: "confirmed" ──► Resend: note to LAUNCH_NOTIFICATION_EMAIL
+                                         ▼
+When Rregullo is live: scripts/send-launch.mjs ──► one email per confirmed subscriber, with unsubscribe link
+Unsubscribe link ──► /cregjistrohu?s=…&t=… ──► address deleted, keyed hash kept to honour the unsubscribe
 ```
 
-The build checks that no template markers are left and that every local file the pages reference exists.
+| Path | What it is |
+|---|---|
+| `/` | The page. The signup form is in the hero (`#lajmerimi`). |
+| `/privatesia` | The privacy notice. It describes exactly what this code does. |
+| `POST /api/subscribe` | Takes JSON from the page's script, or a plain form post when JavaScript is off. |
+| `/konfirmo?t=<token>` | The confirmation link. GET only shows a page; the page posts the token, so link scanners can't confirm anyone. |
+| `/cregjistrohu?s=<id>&t=<sig>` | The unsubscribe link. It asks before acting, and also accepts one-click unsubscribe from mail apps (RFC 8058). |
 
-## Deploy to Cloudflare Pages
+### What's stored
 
-**Option A: from Git (recommended)**
+One row per address in `subscribers` (`migrations/0001_subscribers.sql`). Names, phone numbers and IP addresses are never stored.
 
-1. Push this folder to a GitHub repository (for example `rregullo-site`).
-2. In Cloudflare, open **Workers & Pages > Create > Pages > Connect to Git** and choose the repository.
-3. Set the build settings:
-   - **Framework preset:** None
+| Column | Why |
+|---|---|
+| `email` | To send the confirmation and the launch email. Set to `NULL` on unsubscribe. |
+| `email_hash` | A keyed HMAC of the address. Prevents duplicates and keeps an unsubscribe honoured after the address is deleted. |
+| `status` | `pending`, `confirmed` or `unsubscribed` |
+| `consent_version`, `consent_at` | Which consent wording was accepted (the text is in `server/config.js`), and when. |
+| `confirmed_at`, `unsubscribed_at` | When each happened. |
+| `confirm_token_hash`, `confirm_expires_at` | SHA-256 of the emailed token, never the token itself. Valid for 48 h, single-use. |
+| `confirm_sent_count`, … | Resend limits: one email per 2 minutes, at most 3 per 24 h for each address. |
+| `team_notify_status` | Whether the team note was sent, so a failed one is retried. |
+| `launch_sent_at` | Set by the launch script, so a re-run never sends twice. |
+
+`rate_events` holds a daily-rotating HMAC of the visitor's IP (never the IP itself) for 24 hours, to limit each IP to 6 signups per 10 minutes and 30 per day.
+
+### Safeguards
+
+**Form and API**
+- **Validation:** checked on the server, with messages next to each field in the browser.
+- **Consent:** the checkbox starts unchecked, and the server rejects any request without it.
+- **No double sends:** the button is disabled while a request runs.
+- **Honest success:** the success panel appears only after the server says the request was accepted. On a network failure, what the visitor typed stays in the form.
+- **Bots:** a honeypot field that bots fill and people never see, plus the per-IP rate limit.
+- **Cross-site posts:** refused, along with oversized bodies and wrong methods.
+- **No list leaks:** the same answer comes back whether an address is new, pending or already confirmed, so nobody can find out who is on the list.
+
+**Database and secrets**
+- **Queries:** every query is a prepared statement with bound parameters.
+- **Access:** the database is reachable only through the Functions' `DB` binding. There's no public export or admin endpoint.
+- **Secrets:** they live only in Cloudflare's encrypted secrets and in a git-ignored `.dev.vars` locally. None are in the repo.
+
+**Links and tokens**
+- **Confirmation token:** 32 random bytes; only its hash is stored. URLs never contain the email address.
+- **No leaks from the confirm page:** it sends `Referrer-Policy: no-referrer`, so the token never reaches another site.
+- **Unsubscribe links:** signed with HMAC and compared in constant time.
+
+**Logs and the browser**
+- **Logs:** event names only, such as `confirm_email_sent`, with no addresses or tokens. The test suite checks this.
+- **No tracking:** no cookies, analytics or third-party scripts. A strict Content Security Policy covers the page and the server-rendered pages.
+
+### When something fails
+
+- **The confirmation email can't be sent:** the pending record is kept and the visitor sees *Diçka nuk shkoi si duhet. Provo përsëri pas pak.* Submitting again sends a fresh link. Failed sends don't count towards the resend limit.
+- **The team note can't be sent:** the record is marked `failed`, and the next request to the site retries it, up to 5 times.
+- **The database is unavailable:** the visitor gets the same generic error, never a false success.
+
+### Retention
+
+Retention is enforced automatically: a cleanup runs in the background after signup and confirmation requests.
+
+| Record | Kept for |
+|---|---|
+| Unconfirmed signup | 7 days after the last request |
+| Confirmed subscriber | Until they unsubscribe, or 6 months after the launch email, then deleted |
+| After unsubscribe | The address is deleted at once; the keyed hash is kept 12 months, then deleted |
+| Rate-limit records | 24 hours |
+
+If you change these, change `RETENTION` in `server/config.js` **and** the privacy notice (`src/privatesia.html`) together.
+
+## Setup
+
+These are the one-time steps, in order. Each one needs your accounts; I couldn't do them from here.
+
+### 1. Cloudflare Pages project and DNS for rregullo.net
+
+`rregullo.net` currently resolves to `162.255.119.6`, a Namecheap parking/redirect address, so it isn't on Cloudflare yet.
+
+1. In Cloudflare: **Add a site > rregullo.net** (the Free plan is enough). At Namecheap, under **Domain > Nameservers > Custom DNS**, enter the two nameservers Cloudflare gives you. The switch can take a few hours.
+2. Push this folder to a GitHub repository. Then, in Cloudflare, go to **Workers & Pages > Create > Pages > Connect to Git** and set:
    - **Build command:** `npm run build`
    - **Build output directory:** `dist`
-   - **Environment variables (Production):** `SITE_URL` = your domain with https; `INSTAGRAM_URL` = the official profile once confirmed; `NODE_VERSION` = `20`
-4. Click **Save and Deploy**. The site goes live at `https://<project>.pages.dev`.
-5. Add the domain under **Custom domains > Set up a custom domain**. HTTPS is issued automatically. If the domain's DNS is already on Cloudflare, the record is created for you; otherwise, add the CNAME record Cloudflare shows you.
-6. When the Instagram URL is confirmed later, add or change `INSTAGRAM_URL` and redeploy (**Deployments > Retry deployment**). No code change is needed.
+   - **Environment variable:** `NODE_VERSION` = `20`
+3. Under **Custom domains**, add `rregullo.net` and `www.rregullo.net`. Cloudflare issues HTTPS certificates automatically.
+4. Under **SSL/TLS**: set the mode to **Full (strict)** and turn on **Always Use HTTPS**.
+5. Redirect `www` to the bare domain, with a Redirect Rule from `www.rregullo.net/*` to `https://rregullo.net/${1}`, status 301.
 
-**Option B: direct upload, without Git**
+### 2. Database (D1)
 
 ```bash
-SITE_URL=https://<domain> INSTAGRAM_URL=https://www.instagram.com/<handle>/ npm run build
-npx wrangler pages deploy dist --project-name rregullo
+npx wrangler login
+npx wrangler d1 create rregullo-launch --location=weur      # Western Europe
+# paste the printed database_id into wrangler.toml
+npm run db:migrate                                          # creates the tables in production
 ```
 
-You can also drag the `dist` folder into **Workers & Pages > Create > Pages > Upload assets**.
+Then, under **Pages project > Settings > Bindings**, add a **D1 database** binding named `DB` pointing to `rregullo-launch`, for both Production and Preview. With Git deploys, `wrangler.toml` also declares it.
 
-**What Cloudflare picks up from `dist/`**
+### 3. Email (Resend)
 
-- **`_headers`:** security headers and caching.
-  - **Content Security Policy:** self-hosted only. There are no third-party scripts, fonts or trackers.
-  - **Cache:** CSS and JS are cached for a year; their URLs carry a content hash, so a change always reaches visitors.
-- **`404.html`:** the branded not-found page.
+1. Create a Resend account and go to **Domains > Add domain > `rregullo.net`**. Use a send subdomain if Resend offers one; the default is fine.
+2. Add the DNS records Resend shows (SPF/MX on `send.rregullo.net` and a DKIM TXT) in Cloudflare DNS, then click **Verify**.
+3. Add a DMARC record if there's none: TXT `_dmarc.rregullo.net` with `v=DMARC1; p=none; rua=mailto:<your address>`. Tighten it later.
+4. Create an API key with **Sending access** for that domain only.
+5. The sender is set in `wrangler.toml` as `EMAIL_FROM = "Rregullo <njoftime@rregullo.net>"`. Change the mailbox name if you like; it must be on the verified domain. To have replies go somewhere real, set `EMAIL_REPLY_TO`.
 
-## Checks before going live
+Check Resend's current free-tier daily and monthly limits against the expected list size. If the list will exceed them, upgrade, or send the launch email through a campaign tool (see [Manage the list](#manage-the-list)).
 
-**Verified while building (headless Chromium):**
+### 4. Secrets and settings
 
-- Desktop at 1440 px, tablet at 820 px and phones at 390 px and 320 px, with no horizontal overflow.
-- The film plays and hands off to the SVG logo, and the replay button works.
-- The reduced-motion and no-JavaScript versions show the logo and never download the video.
-- No console errors.
+Set these under **Pages project > Settings > Variables and Secrets** (type **Secret**), or with `npx wrangler pages secret put <NAME> --project-name rregullo`:
 
-**Still to check after deploying:**
+| Name | Value |
+|---|---|
+| `APP_SECRET` | 32+ random characters. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Keep a copy in a password manager: the launch script needs it, and changing it later breaks existing unsubscribe links and duplicate detection. |
+| `RESEND_API_KEY` | The key from step 3 |
+| `LAUNCH_NOTIFICATION_EMAIL` | The team inbox for signup notes. Optional; without it, no notes are sent. |
 
-- [ ] Open the live URL on a real iPhone and Android phone: the film autoplays muted and lands on the logo.
-- [ ] Paste the URL into the [Facebook Sharing Debugger](https://developers.facebook.com/tools/debug/) and check the share card.
-- [ ] Have a native speaker from Kosovo read the copy aloud. In particular, check *libelë* (the spirit level), *Si ka me funksionu* and *Kur të jetë gati*, which are new on this page.
+Non-secret settings are in `wrangler.toml` `[vars]`:
 
-## Files
+| Name | Value |
+|---|---|
+| `SITE_URL` | `https://rregullo.net`. Used to build every link in emails. It never comes from the request's Host header. |
+| `EMAIL_FROM` | The sender, from step 3. |
+| `LAUNCH_NOTIFY_ON` | `confirmed` (default) or `all`, which also notes each new request. |
+
+For the static page, in `site.config.json` or as build environment variables:
+
+| Name | Value |
+|---|---|
+| `CONTACT_EMAIL` | **Set this before launch.** It's the contact for data requests in the privacy notice. The build warns while it's empty. |
+| `INSTAGRAM_URL`, `FACEBOOK_URL`, `TIKTOK_URL`, `LINKEDIN_URL` | Official profiles, shown in the closing section only when set. |
+
+### 5. Deploy
+
+Push to the connected branch, or run `npm run deploy` (`wrangler pages deploy`). Then retry the deployment whenever you change secrets.
+
+## Live check after deploying
+
+**Do this before telling anyone the form works:**
+
+1. On `https://rregullo.net`, sign up with an inbox you control. You should see *Edhe një hap! Kontrollo emailin për me e konfirmu adresën.*
+2. The email *Konfirmo emailin për lansimin e Rregullo* arrives (check spam). In the email's headers, SPF and DKIM should show `pass`.
+3. Click **Konfirmo emailin**. You should see *Emaili u konfirmua. Do të të lajmërojmë kur Rregullo të jetë gati.*
+4. The team inbox gets *Rregullo: regjistrim i ri i konfirmuar*, with the address masked.
+5. Click the same link again. You should see *Kjo lidhje nuk vlen më.*
+6. Run `node scripts/send-launch.mjs --preview-to <your inbox>` (env as in [Launch day](#launch-day)), then click **Çregjistrohu** in the preview. You should see *U çregjistrove.* The preview's link matches nobody, so nothing changes.
+7. Check the logs under **Pages project > Functions > Real-time logs**: they should show events like `confirm_email_sent` and `subscriber_confirmed`, and no addresses.
+
+## Manage the list
+
+Run these from this folder, after `npx wrangler login`:
+
+```bash
+# counts
+npx wrangler d1 execute rregullo-launch --remote --command \
+  "SELECT status, COUNT(*) AS n FROM subscribers GROUP BY status"
+
+# confirmed addresses (to a local file; store it securely and delete it after use)
+npx wrangler d1 execute rregullo-launch --remote --json --command \
+  "SELECT email, confirmed_at FROM subscribers WHERE status = 'confirmed'" > confirmed.json
+
+# someone asks to be removed (or withdraws consent by email): delete them completely
+npx wrangler d1 execute rregullo-launch --remote --command \
+  "DELETE FROM subscribers WHERE email = 'person@example.com'"
+```
+
+**Deleting someone:** a person can withdraw on their own with the unsubscribe link in every launch email. That deletes the address and keeps only the keyed hash. If they haven't confirmed, the record deletes itself after 7 days.
+
+**Using a campaign tool:** to send the launch email through something like Brevo or Mailchimp instead, export only confirmed addresses as above, import them, and delete the export.
+- **Suppression:** don't import anyone whose status is `unsubscribed`; their address is already gone.
+- **No public export:** there's deliberately no public export endpoint.
+
+## Launch day
+
+`scripts/send-launch.mjs` sends the announcement. Each confirmed subscriber gets their own email (no shared recipients), with a personal unsubscribe link and `List-Unsubscribe` / `List-Unsubscribe-Post` headers. The template is `launchEmail()` in `server/templates.js`: it says Rregullo **is now available**, so it only goes out when that's true.
+
+```bash
+export APP_SECRET=… RESEND_API_KEY=… EMAIL_FROM="Rregullo <njoftime@rregullo.net>"
+export LAUNCH_URL=https://rregullo.net/          # where "Hape Rregullo" points
+node scripts/send-launch.mjs                                     # dry run: counts, masked sample
+node scripts/send-launch.mjs --preview-to you@example.com        # one preview to yourself
+node scripts/send-launch.mjs --send --i-confirm-rregullo-is-live # the real send
+```
+
+- **Safe to re-run:** recipients are marked as they go, so a re-run only sends to those not yet sent (including any that failed).
+- **Pacing:** it sends at about 2 per second.
+
+## Local development and tests
+
+```bash
+npm install
+cp .dev.vars.example .dev.vars        # fill APP_SECRET; for no real email, set EMAIL_API_BASE (next line)
+node scripts/mock-email.mjs &          # fake Resend on :8790; see what was "sent" at /_messages
+npm run dev                            # build + local D1 migrations + wrangler pages dev on :8788
+npm test                               # the full flow on :8789 with a fresh database and the mock
+```
+
+`npm test` checks:
+
+- **Signup:**
+  - a valid signup creates a pending record and sends a confirmation email to the normalised address
+  - a missing email, a malformed one, or a missing consent is rejected
+  - a duplicate signup gets the same answer, with no second row and no second email
+  - the honeypot, the rate limit, cross-site posts, oversized bodies and wrong methods are all refused
+- **Confirmation:**
+  - GET doesn't confirm; POST confirms and notifies the team with the address masked
+  - a reused, expired or made-up token is refused
+- **Email content:** the confirmation email's copy and links.
+- **Failures:**
+  - a provider outage gives an error, keeps the record, and a retry delivers
+  - a team-note outage is marked and retried
+  - a database outage gives a generic error, never a false success
+- **Unsubscribe:**
+  - the page asks first
+  - a tampered link is refused
+  - the address is deleted and the hash kept
+  - one-click unsubscribe works
+  - signing up again after unsubscribing needs a new confirmation
+- **Other:**
+  - the no-JavaScript form works
+  - the 7-day retention runs
+  - the logs contain no addresses or tokens
+
+The form itself (validation, the loading state, a double click sending only one request, the error state keeping the input, the success panel, phone layout and keyboard order) was checked in headless Chromium at 1440 px and 390 px.
+
+## The page itself
+
+**Brand assets, all from Rregullo identity 2.4:**
+- **Logo:** inline SVG wordmark and level O.
+- **Hero film:** the 2.4 web cut, muted and cropped to 4:3. MP4 is 0.27 MB on phones and 0.61 MB on desktop, with WebM as a fallback.
+  - **Playback:** it plays once when visible, then hands off to the crisp SVG logo. It never loops, per the brand guide; *Shiko sërish* replays it.
+  - **Fallbacks:** with reduced motion or no JavaScript, it shows the static logo and doesn't download the video.
+- **Fonts and colours:** Schibsted Grotesk, hosted on the site under the SIL OFL; Ink, Paper and Vial lime.
+
+**Files:**
 
 ```
-src/                 the site (edit here)
-  index.html         page; the brand SVGs are in the sprite at the bottom
-  site.css           styles: brand tokens at the top
-  site.js            film playback and the scroll reveals
-  media/             film (MP4 + WebM, 720 and 1200 px), poster, share image
-  fonts/             Schibsted Grotesk (variable, self-hosted) and its licence (SIL OFL 1.1)
-  icons/             favicons and app icons from the identity pack
-  _headers           Cloudflare Pages headers
-  404.html
-scripts/build.mjs    builds src/ into dist/
-site.config.json     domain and social links
+src/                 static site (index.html, privatesia.html, site.css, site.js, notice.js, media, fonts, icons, email logo)
+functions/           Pages Functions: api/subscribe.js, konfirmo.js, cregjistrohu.js
+server/              shared back-end code: config, validation, crypto, D1 queries, email, templates, pages
+migrations/          D1 schema
+scripts/             build.mjs, test-flow.mjs, mock-email.mjs, send-launch.mjs
+wrangler.toml        Pages + D1 + non-secret vars
+.dev.vars.example    secret names for local development (no values)
+site.config.json     domain, contact email, social links (public, non-secret)
 ```
+
+## Before launch, please also
+
+- **Native speaker check:** have someone from Kosovo read all the new copy:
+  - the error messages
+  - the confirm and unsubscribe pages
+  - the privacy notice
+  - the launch email, which I wrote and which wasn't in the brief
+- **Legal review:** have the privacy notice reviewed. It describes this implementation accurately, but it doesn't claim compliance with any specific law, and it mentions Kosovo's Agency for Information and Privacy only as the place to complain.
+- **Contact email:** set `CONTACT_EMAIL`.

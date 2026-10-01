@@ -1,0 +1,19 @@
+# Copy to .dev.vars for local development (`npm run dev`). .dev.vars is git-ignored.
+# In production, set the same names as encrypted secrets:
+#   npx wrangler pages secret put APP_SECRET --project-name rregullo
+# or in the dashboard: Workers & Pages > rregullo > Settings > Variables and Secrets.
+
+# 32+ random characters. Keys the email hash, the unsubscribe links and the IP hash.
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+# Never change it after launch: existing unsubscribe links and duplicate detection depend on it.
+APP_SECRET=
+
+# Resend API key with "Sending access" for the verified rregullo.net domain.
+RESEND_API_KEY=
+
+# Where the team is told about confirmed signups. Optional; leave empty to send none.
+LAUNCH_NOTIFICATION_EMAIL=
+
+# Local overrides (production uses the values in wrangler.toml).
+SITE_URL=http://localhost:8788
+# EMAIL_API_BASE=http://127.0.0.1:8790   # point at scripts/mock-email.mjs to test without sending real email

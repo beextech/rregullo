@@ -36,27 +36,48 @@
   <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
     <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
   </a>
-  <p class="status"><span class="status-dot" aria-hidden="true"></span>Së shpejti në Kosovë</p>
 </header>
 
 <main id="main">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
-      <p class="eyebrow">Po vjen së shpejti</p>
+      <p class="eyebrow status-line"><span class="status-dot" aria-hidden="true"></span>Së shpejti në Kosovë</p>
       <h1 id="hero-title" class="hero-title">
         <span class="hero-line">Punë të vogla, punë të mëdha.</span>
         <span class="hero-line">Mjeshtrin e&nbsp;gjen te&nbsp;Rregullo.</span>
       </h1>
       <p class="hero-text">Prej mureve që lypin ngjyrë, te shpija që don ndryshim. Rregullo po vjen për me ta lehtësu gjetjen e mjeshtrit të duhur.</p>
-      <!-- @if instagram -->
-      <div class="hero-cta">
-        <a class="btn" href="{{INSTAGRAM_URL}}" target="_blank" rel="me noopener">
-          <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-instagram"/></svg>
-          Na ndiq për lansimin
-          <span class="visually-hidden">(Instagram, hapet në dritare të re)</span>
-        </a>
+
+      <div class="signup" id="lajmerimi">
+        <h2 class="signup-title" id="signup-title">Don me qenë ndër të parët që e merr lajmin?</h2>
+        <p class="signup-text" id="signup-text">Lëre emailin dhe të lajmërojmë kur Rregullo të jetë gati.</p>
+        <form class="signup-form" action="/api/subscribe" method="post" novalidate data-signup aria-labelledby="signup-title" aria-describedby="signup-text">
+          <div class="field-row">
+            <label class="visually-hidden" for="signup-email">Email adresa</label>
+            <input class="field-input" id="signup-email" type="email" name="email" placeholder="Email adresa jote"
+                   autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required
+                   aria-describedby="signup-email-error">
+            <button class="btn btn-primary" type="submit"><span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Më lajmëroni</span></button>
+          </div>
+          <p class="field-error" id="signup-email-error" hidden></p>
+          <div class="consent">
+            <input class="consent-box" id="signup-consent" type="checkbox" name="consent" value="true" required aria-describedby="signup-consent-error">
+            <label class="consent-label" for="signup-consent">Pranoj që Rregullo ta ruajë adresën time të emailit për të më njoftuar rreth lansimit të platformës. E kuptoj që mund të çregjistrohem në çdo kohë.</label>
+          </div>
+          <p class="field-error" id="signup-consent-error" hidden></p>
+          <div class="hp" aria-hidden="true">
+            <label for="signup-company">Lëre bosh</label>
+            <input id="signup-company" type="text" name="company_site" tabindex="-1" autocomplete="off">
+          </div>
+          <p class="form-error" data-form-error role="alert" hidden></p>
+          <p class="signup-note">Vetëm për njoftime rreth lansimit. Pa spam. <a href="/privatesia">Njoftimi për privatësi</a></p>
+        </form>
+        <div class="signup-done" data-signup-done role="status" tabindex="-1" hidden>
+          <span class="done-mark" aria-hidden="true"></span>
+          <p class="done-title">Edhe një hap! Kontrollo emailin për me e konfirmu adresën.</p>
+          <p class="done-text">Nëse nuk e gjen, shiko edhe te Spam ose Promotions.</p>
+        </div>
       </div>
-      <!-- @endif -->
     </div>
 
     <div class="stage" data-film>
@@ -82,7 +103,7 @@
     </div>
     <div class="about-body">
       <p class="about-lead">Rregullo është platformë që të ndihmon me gjetë mjeshtra për punët që t'i lyp shpija. Prej riparimeve të vogla e deri te renovimet, ideja është me ta lehtësu gjetjen e personit të duhur për punën që të duhet.</p>
-      <p class="about-note">Platforma është ende në ndërtim. Kur të jetë gati, lajmin e jep së pari këtu dhe në rrjetet tona.</p>
+      <p class="about-note">Platforma është ende në ndërtim. Lëre emailin dhe të lajmërojmë kur të jetë gati.</p>
     </div>
   </section>
 
@@ -134,9 +155,9 @@
       <span>Ki diçka me rregullu?</span>
       <span>Rregullo po vjen.</span>
     </h2>
-    <p class="finale-follow">Na ndiq për lansimin.</p>
+    <p class="finale-cta"><a class="btn btn-primary" href="#lajmerimi" data-to-signup>Më lajmëroni</a></p>
     <!-- @if social -->
-    <p class="finale-text">Na ndiq për me qenë ndër të parët që e merr lajmin kur Rregullo të jetë gati.</p>
+    <p class="finale-text">Na gjen edhe në rrjete sociale.</p>
     <ul class="social" aria-label="Rregullo në rrjetet sociale">
       <!-- @social-links -->
     </ul>
@@ -146,7 +167,7 @@
 
 <footer class="foot">
   <svg class="foot-o" viewBox="0 0 148 139" aria-hidden="true" focusable="false"><use href="#rg-o"/></svg>
-  <p>Rregullo · Së shpejti në Kosovë</p>
+  <p>Rregullo · Së shpejti në Kosovë · <a href="/privatesia">Privatësia</a></p>
 </footer>
 
 <!-- Brand artwork: Rregullo identity 2.4 (01-logo, 02-symbol-o). Drawn, not typed: do not edit the paths. -->

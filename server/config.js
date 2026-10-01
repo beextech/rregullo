@@ -1,5 +1,5 @@
 // Settings for the launch-notification backend. Secrets come from the environment only
-// (Cloudflare Pages: Settings > Variables and Secrets; locally: .dev.vars). Nothing secret lives in Git.
+// (Cloudflare Worker: Settings > Variables and Secrets; locally: .dev.vars). Nothing secret lives in Git.
 
 // The consent wording on the form. Bump the version whenever the wording changes, and keep the old
 // text here, so every stored consent can be traced back to the exact words the person agreed to.

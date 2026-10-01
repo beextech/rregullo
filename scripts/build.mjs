@@ -1,8 +1,8 @@
-// Builds the static site from src/ into dist/ and writes server/build-info.js for the Pages Functions.
+// Builds the static site from src/ into dist/ and writes server/build-info.js for the Worker.
 // No dependencies: Node 18+ only.
 //
 // Configuration comes from site.config.json; environment variables override it
-// (handy in the Cloudflare Pages dashboard):
+// (handy in the Cloudflare build settings):
 //   SITE_URL        https://rregullo.net         canonical URL, absolute share image, sitemap
 //   CONTACT_EMAIL   privacy contact shown in the privacy notice (strongly recommended before launch)
 //   INSTAGRAM_URL, FACEBOOK_URL, TIKTOK_URL, LINKEDIN_URL   official profiles, shown only when set

@@ -15,5 +15,5 @@ RESEND_API_KEY=
 LAUNCH_NOTIFICATION_EMAIL=
 
 # Local overrides (production uses the values in wrangler.toml).
-SITE_URL=http://localhost:8788
+SITE_URL=http://localhost:8787
 # EMAIL_API_BASE=http://127.0.0.1:8790   # point at scripts/mock-email.mjs to test without sending real email

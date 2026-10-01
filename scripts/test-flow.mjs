@@ -1,7 +1,7 @@
 // End-to-end test of the signup flow against the real Functions and a local D1 database,
 // with scripts/mock-email.mjs standing in for Resend. Nothing is sent to real inboxes.
 //   npm test
-// It builds the site, starts `wrangler pages dev` on port 8789 with a fresh database, runs every case,
+// It builds the site, starts `wrangler dev` on port 8789 with a fresh database, runs every case,
 // and stops everything again.
 
 import { spawn, execFileSync } from 'node:child_process';
@@ -70,10 +70,10 @@ async function main() {
 
   const mail = await startMockEmail(MAIL_PORT);
   const inbox = mail.messages;
-  const dev = spawn(wrangler, ['pages', 'dev', '--port', String(PORT), '--persist-to', STATE,
-    '--binding', `APP_SECRET=${SECRET}`, '--binding', 'RESEND_API_KEY=re_test',
-    '--binding', `EMAIL_API_BASE=http://127.0.0.1:${MAIL_PORT}`, '--binding', `SITE_URL=${BASE}`,
-    '--binding', 'LAUNCH_NOTIFICATION_EMAIL=team@example.test', '--binding', 'LAUNCH_NOTIFY_ON=all'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost' } });
+  const dev = spawn(wrangler, ['dev', '--port', String(PORT), '--persist-to', STATE,
+    '--var', `APP_SECRET:${SECRET}`, '--var', 'RESEND_API_KEY:re_test',
+    '--var', `EMAIL_API_BASE:http://127.0.0.1:${MAIL_PORT}`, '--var', `SITE_URL:${BASE}`,
+    '--var', 'LAUNCH_NOTIFICATION_EMAIL:team@example.test', '--var', 'LAUNCH_NOTIFY_ON:all'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost' } });
   let devLog = '';
   dev.stdout.on('data', (d) => { devLog += d; });
   dev.stderr.on('data', (d) => { devLog += d; });

@@ -3,7 +3,7 @@
 The public coming-soon page for Rregullo. Visitors can leave their email address to hear when Rregullo launches; the address only joins the list after they confirm it (double opt-in).
 
 - **Front end:** static HTML, CSS and a little JavaScript, built from Rregullo identity 2.4.
-- **Back end:** Cloudflare Pages Functions, with a Cloudflare D1 (SQLite) database for the list.
+- **Back end:** a Cloudflare Worker that serves the static files (Workers static assets) and the three signup routes, with a Cloudflare D1 (SQLite) database for the list.
 - **Email:** sent through [Resend](https://resend.com) over plain HTTPS. There's no SDK.
 - **Dependencies:** none at runtime. `wrangler` is the only dev dependency.
 
@@ -99,16 +99,20 @@ If you change these, change `RETENTION` in `server/config.js` **and** the privac
 
 These are the one-time steps, in order. Each one needs your accounts; I couldn't do them from here.
 
-### 1. Cloudflare Pages project and DNS for rregullo.net
+### 1. Cloudflare Worker and DNS for rregullo.net
 
-`rregullo.net` currently resolves to `162.255.119.6`, a Namecheap parking/redirect address, so it isn't on Cloudflare yet.
+The site deploys as a Cloudflare Worker named `rregullo` (`wrangler.toml`): `dist/` is served as static assets, and `worker/index.js` routes `/api/subscribe`, `/konfirmo` and `/cregjistrohu` to the handlers in `functions/`. Until the domain is connected it is reachable at `https://rregullo.<your-subdomain>.workers.dev`.
+
+To deploy from your computer: `npx wrangler login`, then steps 2 and 4 below, then `npm run deploy`. To deploy on every push instead, use **Workers & Pages > Create > Import a repository**, pick this repo, and set:
+   - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy`
+   - **Build variable:** `NODE_VERSION` = `20`
+
+Connecting the domain, when you're ready (`rregullo.net` is still on Namecheap's parking address, `162.255.119.6`):
 
 1. In Cloudflare: **Add a site > rregullo.net** (the Free plan is enough). At Namecheap, under **Domain > Nameservers > Custom DNS**, enter the two nameservers Cloudflare gives you. The switch can take a few hours.
-2. Push this folder to a GitHub repository. Then, in Cloudflare, go to **Workers & Pages > Create > Pages > Connect to Git** and set:
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Environment variable:** `NODE_VERSION` = `20`
-3. Under **Custom domains**, add `rregullo.net` and `www.rregullo.net`. Cloudflare issues HTTPS certificates automatically.
+2. Set `SITE_URL` in `wrangler.toml` to `https://rregullo.net` and deploy again, so email links point at the domain.
+3. Under **Worker > Settings > Domains & Routes**, add `rregullo.net` and `www.rregullo.net` as custom domains. Cloudflare issues HTTPS certificates automatically.
 4. Under **SSL/TLS**: set the mode to **Full (strict)** and turn on **Always Use HTTPS**.
 5. Redirect `www` to the bare domain, with a Redirect Rule from `www.rregullo.net/*` to `https://rregullo.net/${1}`, status 301.
 
@@ -121,7 +125,7 @@ npx wrangler d1 create rregullo-launch --location=weur      # Western Europe
 npm run db:migrate                                          # creates the tables in production
 ```
 
-Then, under **Pages project > Settings > Bindings**, add a **D1 database** binding named `DB` pointing to `rregullo-launch`, for both Production and Preview. With Git deploys, `wrangler.toml` also declares it.
+`wrangler.toml` binds it to the Worker as `DB`.
 
 ### 3. Email (Resend)
 
@@ -135,7 +139,7 @@ Check Resend's current free-tier daily and monthly limits against the expected l
 
 ### 4. Secrets and settings
 
-Set these under **Pages project > Settings > Variables and Secrets** (type **Secret**), or with `npx wrangler pages secret put <NAME> --project-name rregullo`:
+Set these under **Worker > Settings > Variables and Secrets** (type **Secret**), or with `npx wrangler secret put <NAME>`:
 
 | Name | Value |
 |---|---|
@@ -147,7 +151,7 @@ Non-secret settings are in `wrangler.toml` `[vars]`:
 
 | Name | Value |
 |---|---|
-| `SITE_URL` | `https://rregullo.net`. Used to build every link in emails. It never comes from the request's Host header. |
+| `SITE_URL` | The public address: the `workers.dev` URL while testing, `https://rregullo.net` once the domain is connected. Used to build every link in emails. It never comes from the request's Host header. |
 | `EMAIL_FROM` | The sender, from step 3. |
 | `LAUNCH_NOTIFY_ON` | `all` (set): a note for every signup request and every confirmation. `confirmed`: confirmations only. |
 
@@ -160,19 +164,19 @@ For the static page, in `site.config.json` or as build environment variables:
 
 ### 5. Deploy
 
-Push to the connected branch, or run `npm run deploy` (`wrangler pages deploy`). Then retry the deployment whenever you change secrets.
+Run `npm run deploy` (build, then `wrangler deploy`), or push to the connected branch if you set up Git deploys. Secrets take effect without a redeploy.
 
 ## Live check after deploying
 
 **Do this before telling anyone the form works:**
 
-1. On `https://rregullo.net`, sign up with an inbox you control. You should see *Edhe një hap! Kontrollo emailin për me e konfirmu adresën.*
+1. On the site (`SITE_URL`), sign up with an inbox you control. You should see *Edhe një hap! Kontrollo emailin për me e konfirmu adresën.*
 2. The email *Konfirmo emailin për lansimin e Rregullo* arrives (check spam). In the email's headers, SPF and DKIM should show `pass`.
 3. Click **Konfirmo emailin**. You should see *Emaili u konfirmua. Do të të lajmërojmë kur Rregullo të jetë gati.*
 4. The team inbox gets two notes, both with the address masked: *Rregullo: kërkesë e re për njoftim* after step 1 and *Rregullo: regjistrim i ri i konfirmuar* after this step. Check Gmail's spam folder the first time and mark them "Not spam".
 5. Click the same link again. You should see *Kjo lidhje nuk vlen më.*
 6. Run `node scripts/send-launch.mjs --preview-to <your inbox>` (env as in [Launch day](#launch-day)), then click **Çregjistrohu** in the preview. You should see *U çregjistrove.* The preview's link matches nobody, so nothing changes.
-7. Check the logs under **Pages project > Functions > Real-time logs**: they should show events like `confirm_email_sent` and `subscriber_confirmed`, and no addresses.
+7. Check the logs under **Worker > Observability > Logs**: they should show events like `confirm_email_sent` and `subscriber_confirmed`, and no addresses.
 
 ## Manage the list
 
@@ -219,7 +223,7 @@ node scripts/send-launch.mjs --send --i-confirm-rregullo-is-live # the real send
 npm install
 cp .dev.vars.example .dev.vars        # fill APP_SECRET; for no real email, set EMAIL_API_BASE (next line)
 node scripts/mock-email.mjs &          # fake Resend on :8790; see what was "sent" at /_messages
-npm run dev                            # build + local D1 migrations + wrangler pages dev on :8788
+npm run dev                            # build + local D1 migrations + wrangler dev on :8787
 npm test                               # the full flow on :8789 with a fresh database and the mock
 ```
 
@@ -264,11 +268,12 @@ The form itself (validation, the loading state, a double click sending only one 
 
 ```
 src/                 static site (index.html, privatesia.html, site.css, site.js, notice.js, media, fonts, icons, email logo)
-functions/           Pages Functions: api/subscribe.js, konfirmo.js, cregjistrohu.js
+worker/index.js      Worker entry: static assets + routes to the handlers below
+functions/           route handlers: api/subscribe.js, konfirmo.js, cregjistrohu.js
 server/              shared back-end code: config, validation, crypto, D1 queries, email, templates, pages
 migrations/          D1 schema
 scripts/             build.mjs, test-flow.mjs, mock-email.mjs, send-launch.mjs
-wrangler.toml        Pages + D1 + non-secret vars
+wrangler.toml        Worker + static assets + D1 + non-secret vars
 .dev.vars.example    secret names for local development (no values)
 site.config.json     domain, contact email, social links (public, non-secret)
 ```

@@ -32,6 +32,6 @@ LAUNCH_NOTIFY_ON = "all"
 [[d1_databases]]
 binding = "DB"
 database_name = "rregullo-launch"
-# Filled in by `npm run deploy:auto`, or paste the id printed by `npx wrangler d1 create rregullo-launch --location=weur`.
-database_id = "00000000-0000-0000-0000-000000000000"
+# rregullo-launch (weur). `npm run deploy:auto` keeps this in sync.
+database_id = "ba8344e4-92f6-4d54-b9cd-e39c6e847caf"
 migrations_dir = "migrations"

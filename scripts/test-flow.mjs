@@ -211,11 +211,11 @@ async function main() {
       assert(requested.length >= 1 && requested[0].text.includes('Në pritje të konfirmimit') && requested[0].text.includes('a***@e***.com'), 'signup note');
       assert(team.every((m) => !/[a-z0-9.]+@example\.com/.test(m.text)), 'a full address appears in a team note');
     });
-    await check('12a. provider outage: error shown, record kept, retry sends a fresh link', async () => {
+    await check('12a. provider outage: signup accepted and kept, retry sends a fresh link', async () => {
       mail.setFail(true);
       const ip = freshIp();
       const r = await subscribe({ email: 'outage@example.com', consent: true }, { ip });
-      assert(r.status === 502 && !r.data.ok && r.data.message === 'Diçka nuk shkoi si duhet. Provo përsëri pas pak.', `status ${r.status}`);
+      assert(r.status === 200 && r.data.ok && r.data.message === 'Faleminderit! Adresa u ruajt. Emaili i konfirmimit do të vijë së shpejti.', `status ${r.status}`);
       const [row] = sql("SELECT status, confirm_email_status AS s, confirm_sent_count AS n FROM subscribers WHERE email = 'outage@example.com'");
       assert(row.status === 'pending' && row.s === 'failed' && row.n === 0, JSON.stringify(row));
       mail.setFail(false);

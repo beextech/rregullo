@@ -2,10 +2,14 @@
 name = "rregullo"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
-# Served at its public workers.dev address for now. rregullo.net is not connected yet: when it is,
-# add it under Settings > Domains & Routes (or a `routes` entry here) and update SITE_URL.
+# Served at rregullo.net and www.rregullo.net (Worker custom domains: Cloudflare creates the DNS records and
+# the SSL certificates), and still at its workers.dev address. User confirmed connecting the domain on 2026-10-01.
 workers_dev = true
 preview_urls = false
+routes = [
+  { pattern = "rregullo.net", custom_domain = true },
+  { pattern = "www.rregullo.net", custom_domain = true },
+]
 
 # Builds dist/ before every `wrangler deploy` / `versions upload`, so Cloudflare's Git builds work with their default commands.
 [build]
@@ -25,7 +29,7 @@ enabled = true
 # `wrangler secret put` or in the dashboard, never here.
 [vars]
 # The public address every email link points at. `npm run deploy:auto` sets it to the workers.dev URL.
-SITE_URL = "https://rregullo.beextech0.workers.dev"
+SITE_URL = "https://rregullo.net"
 # Until rregullo.net is verified in Resend this is Resend's test sender, which only delivers to the
 # Resend account's own address. Switch back to "Rregullo <njoftime@rregullo.net>" once it's verified.
 EMAIL_FROM = "Rregullo <onboarding@resend.dev>"

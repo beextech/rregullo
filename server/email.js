@@ -42,8 +42,11 @@ export async function sendEmail(cfg, msg) {
     throw new EmailError(`network: ${e.name}`);
   }
   if (!res.ok) {
-    // The provider's error body can echo the recipient; log only the status code.
-    throw new EmailError(`provider status ${res.status}`, { status: res.status, retryable: res.status === 429 || res.status >= 500 });
+    // The provider's error message can echo the recipient; log only the status code and Resend's error type
+    // (e.g. `validation_error`), restricted to a safe identifier.
+    const err = await res.json().catch(() => ({}));
+    const type = typeof err.name === 'string' && /^[a-z_]{1,40}$/.test(err.name) ? ` ${err.name}` : '';
+    throw new EmailError(`provider status ${res.status}${type}`, { status: res.status, retryable: res.status === 429 || res.status >= 500 });
   }
   const data = await res.json().catch(() => ({}));
   return data.id || '';

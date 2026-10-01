@@ -12,7 +12,8 @@
     "db:migrate": "wrangler d1 migrations apply rregullo-launch --remote",
     "test": "node scripts/test-flow.mjs",
     "send-launch": "node scripts/send-launch.mjs",
-    "deploy": "node scripts/build.mjs && wrangler deploy"
+    "deploy": "node scripts/build.mjs && wrangler deploy",
+    "deploy:auto": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.146.0"

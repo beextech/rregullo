@@ -103,7 +103,15 @@ These are the one-time steps, in order. Each one needs your accounts; I couldn't
 
 The site deploys as a Cloudflare Worker named `rregullo` (`wrangler.toml`): `dist/` is served as static assets, and `worker/index.js` routes `/api/subscribe`, `/konfirmo` and `/cregjistrohu` to the handlers in `functions/`. Until the domain is connected it is reachable at `https://rregullo.<your-subdomain>.workers.dev`.
 
-To deploy from your computer: `npx wrangler login`, then steps 2 and 4 below, then `npm run deploy`. To deploy on every push instead, use **Workers & Pages > Create > Import a repository**, pick this repo, and set:
+Quickest path, with an API token (Workers Scripts Edit, D1 Edit, Account Settings Read) in the environment:
+
+```bash
+CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=… RESEND_API_KEY=… LAUNCH_NOTIFICATION_EMAIL=… npm run deploy:auto
+```
+
+`scripts/deploy.mjs` creates the D1 database if needed, writes its id and the workers.dev `SITE_URL` into `wrangler.toml`, runs the migrations, builds, deploys, stores the secrets (generating `APP_SECRET` only if the Worker has none) and checks the live page. Commit `wrangler.toml` afterwards.
+
+To deploy from your computer by hand: `npx wrangler login`, then steps 2 and 4 below, then `npm run deploy`. To deploy on every push instead, use **Workers & Pages > Create > Import a repository**, pick this repo, and set:
    - **Build command:** `npm run build`
    - **Deploy command:** `npx wrangler deploy`
    - **Build variable:** `NODE_VERSION` = `20`

@@ -116,13 +116,7 @@ To deploy from your computer by hand: `npx wrangler login`, then steps 2 and 4 b
    - **Deploy command:** `npx wrangler deploy`
    - **Build variable:** `NODE_VERSION` = `20`
 
-Connecting the domain, when you're ready (`rregullo.net` is still on Namecheap's parking address, `162.255.119.6`):
-
-1. In Cloudflare: **Add a site > rregullo.net** (the Free plan is enough). At Namecheap, under **Domain > Nameservers > Custom DNS**, enter the two nameservers Cloudflare gives you. The switch can take a few hours.
-2. Set `SITE_URL` in `wrangler.toml` to `https://rregullo.net` and deploy again, so email links point at the domain.
-3. Under **Worker > Settings > Domains & Routes**, add `rregullo.net` and `www.rregullo.net` as custom domains. Cloudflare issues HTTPS certificates automatically.
-4. Under **SSL/TLS**: set the mode to **Full (strict)** and turn on **Always Use HTTPS**.
-5. Redirect `www` to the bare domain, with a Redirect Rule from `www.rregullo.net/*` to `https://rregullo.net/${1}`, status 301.
+The domain is connected through `routes` in `wrangler.toml`: `rregullo.net` and `www.rregullo.net` are Worker custom domains, so each deploy creates their DNS records and HTTPS certificates. The DNS zone is on Cloudflare (nameservers set at Namecheap). If a deploy fails with *"Hostname … already has externally managed DNS records"*, delete the A, AAAA and CNAME records for `@` and `www` under **rregullo.net > DNS > Records** (keep the MX and TXT email-forwarding records) and deploy again. `SITE_URL` is `https://rregullo.net`; note that `npm run deploy:auto` rewrites it to the workers.dev address.
 
 ### 2. Database (D1)
 

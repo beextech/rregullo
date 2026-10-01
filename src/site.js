@@ -149,11 +149,6 @@ function mountSignup(form) {
     setBusy(false);
 
     if (res.ok && data.ok) {
-      // The server sends a different message when the address was saved but the email couldn't go out yet.
-      if (data.message && data.message !== done.querySelector('.done-title').textContent) {
-        done.querySelector('.done-title').textContent = data.message;
-        done.querySelector('.done-text').hidden = true;
-      }
       form.hidden = true;
       done.hidden = false;
       done.focus();

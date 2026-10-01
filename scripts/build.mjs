@@ -1,0 +1,108 @@
+// Builds the static site from src/ into dist/. No dependencies: Node 18+ only.
+//
+// Configuration comes from site.config.json, and environment variables override it
+// (handy in the Cloudflare Pages dashboard):
+//   SITE_URL        https://example.com        canonical URL, absolute Open Graph image, sitemap
+//   INSTAGRAM_URL   https://www.instagram.com/<handle>/
+//   FACEBOOK_URL, TIKTOK_URL, LINKEDIN_URL      optional, same rules
+//
+// A social link is only published when its URL is set, uses https and points at that network's own
+// domain. With no Instagram URL the hero has no follow button (there is nothing to link to yet).
+
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const src = join(root, 'src');
+const dist = join(root, 'dist');
+
+const config = JSON.parse(readFileSync(join(root, 'site.config.json'), 'utf8'));
+const env = process.env;
+
+const NETWORKS = {
+  instagram: { label: 'Instagram', icon: 'ic-instagram', hosts: ['instagram.com', 'www.instagram.com'] },
+  facebook: { label: 'Facebook', icon: 'ic-facebook', hosts: ['facebook.com', 'www.facebook.com', 'm.facebook.com'] },
+  tiktok: { label: 'TikTok', icon: 'ic-tiktok', hosts: ['tiktok.com', 'www.tiktok.com'] },
+  linkedin: { label: 'LinkedIn', icon: 'ic-linkedin', hosts: ['linkedin.com', 'www.linkedin.com'] },
+};
+
+const fail = (msg) => { console.error(`build: ${msg}`); process.exit(1); };
+const warn = (msg) => console.warn(`build: warning: ${msg}`);
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function parseUrl(value, what, hosts) {
+  if (!value) return '';
+  let u;
+  try { u = new URL(value.trim()); } catch { fail(`${what} is not a valid URL: ${value}`); }
+  if (u.protocol !== 'https:') fail(`${what} must use https: ${value}`);
+  if (hosts && !hosts.includes(u.hostname)) fail(`${what} must be on ${hosts[0]}: ${value}`);
+  if (hosts && (u.pathname === '/' || u.pathname === '')) fail(`${what} must point at a profile, not the home page: ${value}`);
+  return u.href;
+}
+
+const siteUrl = parseUrl(env.SITE_URL || config.siteUrl, 'SITE_URL').replace(/\/$/, '');
+const social = {};
+for (const [key, net] of Object.entries(NETWORKS)) {
+  const v = env[`${key.toUpperCase()}_URL`] || (config.social && config.social[key]) || '';
+  const url = parseUrl(v, `${net.label} URL`, net.hosts);
+  if (url) social[key] = url;
+}
+
+// Fresh output
+rmSync(dist, { recursive: true, force: true });
+cpSync(src, dist, { recursive: true });
+
+const hash = (file) => createHash('sha256').update(readFileSync(join(src, file))).digest('hex').slice(0, 10);
+const cssHash = hash('site.css');
+const jsHash = hash('site.js');
+
+// Conditional blocks: <!-- @if name --> ... <!-- @endif -->
+const blocks = (html, flags) => html.replace(/[ \t]*<!-- @if (\w+) -->\n?([\s\S]*?)[ \t]*<!-- @endif -->\n?/g,
+  (_, name, body) => (flags[name] ? body : ''));
+
+const socialLinks = Object.entries(social).map(([key, url]) => {
+  const net = NETWORKS[key];
+  return `<li><a href="${esc(url)}" target="_blank" rel="me noopener"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#${net.icon}"/></svg>${net.label}<span class="visually-hidden"> (hapet në dritare të re)</span></a></li>`;
+}).join('\n      ');
+
+let index = readFileSync(join(src, 'index.html'), 'utf8');
+const sprite = index.slice(index.indexOf('<!-- Brand artwork'), index.indexOf('</body>'));
+index = blocks(index, { instagram: !!social.instagram, social: Object.keys(social).length > 0 });
+index = index
+  .replace('<!-- @social-links -->', socialLinks)
+  .replace('<!-- @canonical -->', siteUrl
+    ? `<link rel="canonical" href="${esc(siteUrl)}/">\n<meta property="og:url" content="${esc(siteUrl)}/">`
+    : '')
+  .replaceAll('{{ASSET_BASE}}', siteUrl)
+  .replaceAll('{{INSTAGRAM_URL}}', esc(social.instagram || ''))
+  .replaceAll('{{CSS_HASH}}', cssHash)
+  .replaceAll('{{JS_HASH}}', jsHash)
+  .replace(/^\s*\n/gm, '');
+writeFileSync(join(dist, 'index.html'), index);
+
+let notFound = readFileSync(join(src, '404.html'), 'utf8');
+notFound = notFound.replaceAll('{{CSS_HASH}}', cssHash).replace('<!-- @sprite -->', sprite.trim());
+writeFileSync(join(dist, '404.html'), notFound);
+
+// robots and sitemap need the real domain; without it, allow crawling and skip the sitemap
+writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
+if (siteUrl) {
+  writeFileSync(join(dist, 'sitemap.xml'),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n</urlset>\n`);
+}
+
+// Sanity checks: no template markers left, every local asset referenced exists
+for (const file of ['index.html', '404.html']) {
+  const html = readFileSync(join(dist, file), 'utf8');
+  const left = html.match(/\{\{\w+\}\}|<!-- @\w+/g);
+  if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);
+  for (const [, ref] of html.matchAll(/(?:src|href|poster|content)="(\/[^"#?]*)/g)) {
+    if (ref !== '/' && !existsSync(join(dist, ref))) fail(`${file} references a missing file: ${ref}`);
+  }
+}
+
+if (!siteUrl) warn('SITE_URL is not set: no canonical URL or sitemap, and the share image uses a relative URL (some apps will not show it).');
+if (!social.instagram) warn('INSTAGRAM_URL is not set: the "Na ndiq për lansimin" button and social links are left out.');
+console.log(`build: dist/ ready (${Object.keys(social).length ? Object.keys(social).join(', ') : 'no social links'}${siteUrl ? `, ${siteUrl}` : ''})`);

@@ -2,8 +2,11 @@
 name = "rregullo"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
-workers_dev = true
+# Served only at rregullo.net (a Worker custom domain); no workers.dev address.
+# www.rregullo.net redirects to it with a Cloudflare redirect rule on the zone.
+workers_dev = false
 preview_urls = false
+routes = [{ pattern = "rregullo.net", custom_domain = true }]
 
 [assets]
 directory = "dist"
@@ -19,8 +22,9 @@ enabled = true
 # `wrangler secret put` or in the dashboard, never here.
 [vars]
 SITE_URL = "https://rregullo.net"
-# The sender must be on a domain verified in Resend (see README). Change the mailbox name if you prefer.
-EMAIL_FROM = "Rregullo <njoftime@rregullo.net>"
+# Until rregullo.net is verified in Resend this is Resend's test sender, which only delivers to the
+# Resend account's own address. Switch back to "Rregullo <njoftime@rregullo.net>" once it's verified.
+EMAIL_FROM = "Rregullo <onboarding@resend.dev>"
 # 'all': the team hears about every signup request and every confirmation. 'confirmed': confirmations only.
 # The recipient (LAUNCH_NOTIFICATION_EMAIL) is set as a secret, not here, so it never lands in Git.
 LAUNCH_NOTIFY_ON = "all"

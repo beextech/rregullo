@@ -10,7 +10,7 @@ const MAX_BODY = 4096;
 
 function reply(asHtml, status, data) {
   if (asHtml) {
-    if (data.ok) return page({ title: 'Edhe një hap', heading: MESSAGES.accepted, action: homeLink }, status);
+    if (data.ok) return page({ title: 'Edhe një hap', heading: data.message || MESSAGES.accepted, action: homeLink }, status);
     const detail = data.errors ? Object.values(data.errors).join(' ') : data.message;
     return page({
       title: 'Provo përsëri', heading: 'Kërkesa nuk u pranua.', body: detail, tone: 'error',
@@ -72,7 +72,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
       if (out.notifyTeam) await notifyTeam(cfg, out.notifyTeam, 'pending', now);
       await maintenance(cfg, now);
     })().catch((e) => log('maintenance_failed', { reason: e.message })));
-    if (out.result === 'send_failed') return reply(asHtml, 502, { ok: false, message: MESSAGES.generic });
+    // The signup is stored even when the email provider refuses or is down; don't show the visitor an error.
+    if (out.result === 'send_failed') return reply(asHtml, 200, { ok: true, message: MESSAGES.savedNoEmail });
     return reply(asHtml, 200, { ok: true, message: MESSAGES.accepted });
   } catch (e) {
     log('signup_failed', { reason: e.message });

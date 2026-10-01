@@ -49,7 +49,6 @@ async function subscribe(body, { ip = freshIp(), origin = BASE, json = true } = 
   try { data = JSON.parse(text); } catch { /* HTML */ }
   return { status: res.status, data, text };
 }
-const tokenFrom = (msg) => (msg.text.match(/konfirmo\?t=([A-Za-z0-9_-]{43})/) || [])[1];
 // wrangler's dev server sometimes drops a kept-alive socket after a response that scheduled background
 // work; browsers retry that transparently, so the test does too (once, and only on a socket error).
 async function post(url, init) {
@@ -85,19 +84,18 @@ async function main() {
 
   try {
     console.log('Signup');
-    let token;
-    await check('1. valid email with consent: accepted, pending, one confirmation email', async () => {
+    await check('1. valid email with consent: saved on the list at once, no email to the visitor, team notified (masked)', async () => {
       const r = await subscribe({ email: '  Ana.Test@Example.com ', consent: true });
       assert(r.status === 200 && r.data.ok, `status ${r.status}`);
-      assert(r.data.message === 'Edhe një hap! Kontrollo emailin për me e konfirmu adresën.', 'success message');
-      assert(inbox.length === 1 && inbox[0].to[0] === 'ana.test@example.com', 'confirmation email to the normalised address');
-      assert(inbox[0].subject === 'Konfirmo emailin për lansimin e Rregullo', 'subject');
-      token = tokenFrom(inbox[0]);
-      assert(token, 'token in the confirmation link');
-      assert(!inbox[0].text.includes('ana.test'), 'the link does not contain the address');
-      const [row] = sql("SELECT status, consent_version, consent_at, confirm_token_hash, email FROM subscribers WHERE email = 'ana.test@example.com'");
-      assert(row && row.status === 'pending' && row.consent_version === 'launch-notify-v1' && row.consent_at > 0, 'pending row with consent');
-      assert(row.confirm_token_hash && row.confirm_token_hash !== token, 'only the token hash is stored');
+      assert(r.data.message === 'Faleminderit! Do të të lajmërojmë kur Rregullo të jetë gati.', 'success message');
+      const [row] = sql("SELECT status, consent_version, consent_at, confirmed_at, confirm_token_hash FROM subscribers WHERE email = 'ana.test@example.com'");
+      assert(row && row.status === 'confirmed' && row.consent_version === 'launch-notify-v1' && row.consent_at > 0 && row.confirmed_at > 0, 'saved with consent');
+      assert(row.confirm_token_hash === null, 'no confirmation token');
+      await wait(1500);
+      assert(!inbox.some((m) => m.to[0] === 'ana.test@example.com'), 'no email to the visitor');
+      const team = inbox.find((m) => m.to[0] === 'team@example.test');
+      assert(team && team.text.includes('a***@e***.com') && !team.text.includes('ana.test@example.com'), 'masked team note');
+      assert(sql("SELECT team_notify_status AS s FROM subscribers WHERE email = 'ana.test@example.com'")[0].s === 'sent', 'recorded as sent');
     });
     await check('2. missing email: rejected with a field message', async () => {
       const r = await subscribe({ email: '', consent: true });
@@ -116,7 +114,7 @@ async function main() {
       }
       assert(sql("SELECT COUNT(*) AS n FROM subscribers WHERE email = 'nocons@example.com'")[0].n === 0, 'no row');
     });
-    await check('5. duplicate signup: same answer, no duplicate row, no extra email within 2 minutes', async () => {
+    await check('5. duplicate signup: same answer, no duplicate row, no extra email', async () => {
       const before = inbox.length;
       const r = await subscribe({ email: 'ana.test@example.com', consent: true });
       assert(r.status === 200 && r.data.ok, `status ${r.status}`);
@@ -148,98 +146,36 @@ async function main() {
       assert((await fetch(`${BASE}/api/subscribe`)).status === 405, 'GET allowed');
     });
 
-    console.log('Confirmation');
-    await check('7a. opening the link (GET) shows a page but does not confirm', async () => {
-      const r = await fetch(`${BASE}/konfirmo?t=${token}`);
-      const html = await r.text();
-      assert(r.status === 200 && html.includes('name="t"') && html.includes('data-autosubmit'), 'confirm form');
-      assert(r.headers.get('referrer-policy') === 'no-referrer', 'no-referrer');
-      assert(sql("SELECT status FROM subscribers WHERE email = 'ana.test@example.com'")[0].status === 'pending', 'still pending');
-    });
-    await check('7b. confirming (POST) activates the subscription and notifies the team (masked)', async () => {
-      const before = inbox.length;
-      const r = await confirmPost(token);
-      const html = await r.text();
-      assert(r.status === 200 && html.includes('Emaili u konfirmua. Do të të lajmërojmë kur Rregullo të jetë gati.'), `status ${r.status}`);
-      const [row] = sql("SELECT status, confirmed_at, confirm_token_hash FROM subscribers WHERE email = 'ana.test@example.com'");
-      assert(row.status === 'confirmed' && row.confirmed_at > 0 && row.confirm_token_hash === null, 'confirmed, token cleared');
-      await wait(1500);
-      const team = inbox.slice(before).find((m) => m.to[0] === 'team@example.test');
-      assert(team, 'team email');
-      assert(team.text.includes('a***@e***.com') && !team.text.includes('ana.test@example.com'), 'masked address');
-      assert(team.text.includes('I konfirmuar'), 'status line');
-      assert(sql("SELECT team_notify_status AS s FROM subscribers WHERE email = 'ana.test@example.com'")[0].s === 'sent', 'recorded as sent');
-    });
-    await check('8a. reusing a confirmation link: refused', async () => {
-      const r = await confirmPost(token);
-      assert(r.status === 400 && (await r.text()).includes('Kjo lidhje nuk vlen më.'), `status ${r.status}`);
-    });
-    await check('8b. expired link: refused with a way to sign up again', async () => {
-      await subscribe({ email: 'late@example.com', consent: true });
-      const t = tokenFrom(inbox[inbox.length - 1]);
-      sql("UPDATE subscribers SET confirm_expires_at = 1 WHERE email = 'late@example.com'");
-      const r = await confirmPost(t);
-      assert(r.status === 410 && (await r.text()).includes('Kjo lidhje ka skaduar.'), `status ${r.status}`);
-      assert(sql("SELECT status FROM subscribers WHERE email = 'late@example.com'")[0].status === 'pending', 'not confirmed');
-    });
+    console.log('Old confirmation links');
     await check('8c. malformed or made-up tokens: refused', async () => {
       assert((await confirmPost('abc')).status === 400, 'short');
       assert((await confirmPost('A'.repeat(43))).status === 400, 'unknown');
       assert((await fetch(`${BASE}/konfirmo?t=<script>`)).status === 400, 'GET junk');
     });
-    await check('8d. already-confirmed address signs up again: same answer, no email', async () => {
-      const before = inbox.length;
-      const r = await subscribe({ email: 'ana.test@example.com', consent: true });
-      assert(r.status === 200 && r.data.ok && inbox.length === before, 'generic, silent');
-    });
 
-    console.log('Email delivery');
-    await check('9. confirmation email: Albanian copy, button link, plain-text part, privacy link', async () => {
-      const m = inbox.find((x) => x.to[0] === 'late@example.com');
-      for (const s of ['Përshëndetje!', 'Faleminderit për interesimin për Rregullo.', 'Konfirmo emailin', 'Me respekt,', 'Ekipi Rregullo',
-        'Ky email është dërguar sepse ke kërkuar të njoftohesh rreth lansimit të Rregullo.']) {
-        assert(m.html.includes(s), `html missing: ${s}`);
-      }
-      assert(m.text.includes(`${BASE}/konfirmo?t=`) && m.text.includes(`${BASE}/privatesia`), 'links in text part');
-      assert(m.from.includes('Rregullo'), 'sender');
-    });
-    await check('10. team notifications: one on signup, one on confirmation, only to LAUNCH_NOTIFICATION_EMAIL', async () => {
-      const team = inbox.filter((m) => m.to[0] === 'team@example.test');
-      const requested = team.filter((m) => m.subject === 'Rregullo: kërkesë e re për njoftim');
-      const confirmed = team.filter((m) => m.subject === 'Rregullo: regjistrim i ri i konfirmuar');
-      assert(confirmed.length === 1, `confirmation notes: ${confirmed.length}`);
-      assert(requested.length >= 1 && requested[0].text.includes('Në pritje të konfirmimit') && requested[0].text.includes('a***@e***.com'), 'signup note');
-      assert(team.every((m) => !/[a-z0-9.]+@example\.com/.test(m.text)), 'a full address appears in a team note');
-    });
-    await check('12a. provider outage: signup accepted and kept, retry sends a fresh link', async () => {
+    console.log('Email outages');
+    await check('12a. email provider down: the signup is still saved and accepted', async () => {
       mail.setFail(true);
-      const ip = freshIp();
-      const r = await subscribe({ email: 'outage@example.com', consent: true }, { ip });
-      assert(r.status === 200 && r.data.ok && r.data.message === 'Faleminderit! Adresa u ruajt. Emaili i konfirmimit do të vijë së shpejti.', `status ${r.status}`);
-      const [row] = sql("SELECT status, confirm_email_status AS s, confirm_sent_count AS n FROM subscribers WHERE email = 'outage@example.com'");
-      assert(row.status === 'pending' && row.s === 'failed' && row.n === 0, JSON.stringify(row));
+      const r = await subscribe({ email: 'outage@example.com', consent: true }, { ip: freshIp() });
+      assert(r.status === 200 && r.data.ok, `status ${r.status}`);
+      assert(sql("SELECT status FROM subscribers WHERE email = 'outage@example.com'")[0].status === 'confirmed', 'saved');
       mail.setFail(false);
-      const before = inbox.length;
-      const r2 = await subscribe({ email: 'outage@example.com', consent: true }, { ip });
-      assert(r2.status === 200 && inbox.length === before + 1, 'retry delivered');
     });
     await check('12b. team notification outage: recorded as failed, retried later', async () => {
-      await subscribe({ email: 'teamfail@example.com', consent: true });
-      const t = tokenFrom(inbox[inbox.length - 1]);
       mail.setFail(true);
-      assert((await confirmPost(t)).status === 200, 'confirmation still succeeds');
+      await subscribe({ email: 'teamfail@example.com', consent: true }, { ip: freshIp() });
       await wait(1500);
       assert(sql("SELECT team_notify_status AS s FROM subscribers WHERE email = 'teamfail@example.com'")[0].s === 'failed', 'marked failed');
       mail.setFail(false);
       sql("UPDATE subscribers SET updated_at = updated_at - 120000 WHERE email = 'teamfail@example.com'");
-      await subscribe({ email: 'trigger@example.com', consent: true });     // any request runs maintenance
+      await subscribe({ email: 'trigger@example.com', consent: true }, { ip: freshIp() });     // any request runs maintenance
       await wait(2000);
       assert(sql("SELECT team_notify_status AS s FROM subscribers WHERE email = 'teamfail@example.com'")[0].s === 'sent', 'retried and sent');
     });
     await check('12c. database failure: generic error, no false success', async () => {
       sql('ALTER TABLE subscribers RENAME TO subscribers_off');
       try {
-        const r = await subscribe({ email: 'dbdown@example.com', consent: true });
+        const r = await subscribe({ email: 'dbdown@example.com', consent: true }, { ip: freshIp() });
         assert(r.status === 500 && !r.data.ok && r.data.message === 'Diçka nuk shkoi si duhet. Provo përsëri pas pak.', `status ${r.status}`);
       } finally {
         sql('ALTER TABLE subscribers_off RENAME TO subscribers');
@@ -274,29 +210,28 @@ async function main() {
       assert(r.status === 200, `status ${r.status}`);
       assert(sql(`SELECT status FROM subscribers WHERE id = '${id2}'`)[0].status === 'unsubscribed', 'unsubscribed');
     });
-    await check('11e. signing up again after unsubscribing: back to pending, needs a new confirmation', async () => {
-      const r = await subscribe({ email: 'ana.test@example.com', consent: true });
+    await check('11e. signing up again after unsubscribing: back on the list with fresh consent', async () => {
+      const r = await subscribe({ email: 'ana.test@example.com', consent: true }, { ip: freshIp() });
       assert(r.status === 200, `status ${r.status}`);
-      const [row] = sql(`SELECT status, email FROM subscribers WHERE id = '${id}'`);
-      assert(row.status === 'pending' && row.email === 'ana.test@example.com', JSON.stringify(row));
+      const [row] = sql(`SELECT status, email, unsubscribed_at FROM subscribers WHERE id = '${id}'`);
+      assert(row.status === 'confirmed' && row.email === 'ana.test@example.com' && row.unsubscribed_at === null, JSON.stringify(row));
     });
 
     console.log('Without JavaScript and retention');
     await check('13. plain form post (no JavaScript) gets an HTML result page', async () => {
-      const r = await subscribe({ email: 'nojs@example.com', consent: 'true' }, { json: false });
-      assert(r.status === 200 && r.text.includes('Edhe një hap!'), `status ${r.status}`);
+      const r = await subscribe({ email: 'nojs@example.com', consent: 'true' }, { json: false, ip: freshIp() });
+      assert(r.status === 200 && r.text.includes('Faleminderit!'), `status ${r.status}`);
       const bad = await subscribe({ email: 'nojs2@example.com' }, { json: false });
       assert(bad.status === 400 && bad.text.includes('pranosh'), 'consent error page');
     });
-    await check('14. retention: unconfirmed signups older than 7 days are deleted', async () => {
-      sql("UPDATE subscribers SET updated_at = 1 WHERE email = 'late@example.com'");
-      await subscribe({ email: 'trigger2@example.com', consent: true });
+    await check('14. retention: old pending rows (from the double opt-in days) are deleted after 7 days', async () => {
+      sql("UPDATE subscribers SET status = 'pending', updated_at = 1 WHERE email = 'outage@example.com'");
+      await subscribe({ email: 'trigger2@example.com', consent: true }, { ip: freshIp() });
       await wait(1500);
-      assert(sql("SELECT COUNT(*) AS n FROM subscribers WHERE email = 'late@example.com'")[0].n === 0, 'still there');
+      assert(sql("SELECT COUNT(*) AS n FROM subscribers WHERE email = 'outage@example.com'")[0].n === 0, 'still there');
     });
     await check('15. logs contain no addresses or tokens', async () => {
       assert(!/@example\.com/.test(devLog), 'an address appears in the logs');
-      assert(!devLog.includes(token), 'a token appears in the logs');
     });
   } finally {
     dev.kill('SIGTERM');

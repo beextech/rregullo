@@ -2,7 +2,7 @@
 // JSON in and out for the page's JavaScript; a plain form post (no JavaScript) gets an HTML page back.
 
 import { readConfig } from '../../server/config.js';
-import { log, maintenance, notifyTeam, rateLimited, requestSignup } from '../../server/subscribers.js';
+import { log, maintenance, notifyTeam, rateLimited, saveSignup } from '../../server/subscribers.js';
 import { MESSAGES, validateSignup } from '../../server/validate.js';
 import { esc, homeLink, page } from '../../server/pages.js';
 
@@ -10,7 +10,7 @@ const MAX_BODY = 4096;
 
 function reply(asHtml, status, data) {
   if (asHtml) {
-    if (data.ok) return page({ title: 'Edhe një hap', heading: data.message || MESSAGES.accepted, action: homeLink }, status);
+    if (data.ok) return page({ title: 'Faleminderit', heading: MESSAGES.accepted, action: homeLink }, status);
     const detail = data.errors ? Object.values(data.errors).join(' ') : data.message;
     return page({
       title: 'Provo përsëri', heading: 'Kërkesa nuk u pranua.', body: detail, tone: 'error',
@@ -56,7 +56,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (Object.keys(errors).length) return reply(asHtml, 400, { ok: false, errors });
 
   const cfg = readConfig(env);
-  if (cfg.missing.length) {
+  // Saving a signup needs only the database and the secret; email settings matter only for the team notice.
+  if (!cfg.db || !cfg.siteUrl || !cfg.appSecret || cfg.appSecret.length < 32) {
     log('config_missing', { missing: cfg.missing });
     return reply(asHtml, 503, { ok: false, message: MESSAGES.generic });
   }
@@ -67,13 +68,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
       log('signup_rate_limited');
       return reply(asHtml, 429, { ok: false, message: MESSAGES.rateLimited });
     }
-    const out = await requestSignup(cfg, email, now);
+    const out = await saveSignup(cfg, email, now);
     waitUntil((async () => {
-      if (out.notifyTeam) await notifyTeam(cfg, out.notifyTeam, 'pending', now);
+      if (out.notifyTeam && !cfg.missing.length) await notifyTeam(cfg, out.notifyTeam, 'confirmed', now);
       await maintenance(cfg, now);
     })().catch((e) => log('maintenance_failed', { reason: e.message })));
-    // The signup is stored even when the email provider refuses or is down; don't show the visitor an error.
-    if (out.result === 'send_failed') return reply(asHtml, 200, { ok: true, message: MESSAGES.savedNoEmail });
     return reply(asHtml, 200, { ok: true, message: MESSAGES.accepted });
   } catch (e) {
     log('signup_failed', { reason: e.message });

@@ -6,9 +6,7 @@ export const MESSAGES = {
   consentMissing: 'Për me të lajmëru, duhet ta pranosh ruajtjen e emailit.',
   generic: 'Diçka nuk shkoi si duhet. Provo përsëri pas pak.',
   rateLimited: 'Ke provu shumë herë. Provo përsëri pas pak.',
-  accepted: 'Edhe një hap! Kontrollo emailin për me e konfirmu adresën.',
-  // The address is saved but the confirmation email couldn't be sent yet; signing up again resends it.
-  savedNoEmail: 'Faleminderit! Adresa u ruajt. Emaili i konfirmimit do të vijë së shpejti.',
+  accepted: 'Faleminderit! Do të të lajmërojmë kur Rregullo të jetë gati.',
 };
 
 /** Trim and lower-case. Plus-addressing is kept: it is a real, distinct address. */

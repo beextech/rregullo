@@ -1,10 +1,10 @@
-// The launch list: signup with double opt-in, confirmation, unsubscribe, retention and team notices.
+// The launch list: signup (single opt-in), legacy confirmation links, unsubscribe, retention and team notices.
 // Every query is a prepared statement with bound parameters.
 
 import { CONSENT_VERSION, LIMITS, RETENTION } from './config.js';
-import { emailHash, ipBucket, randomToken, safeEqual, sha256, unsubscribeSig, uuid } from './crypto.js';
+import { emailHash, ipBucket, safeEqual, sha256, unsubscribeSig, uuid } from './crypto.js';
 import { sendEmail } from './email.js';
-import { confirmationEmail, teamNotificationEmail } from './templates.js';
+import { teamNotificationEmail } from './templates.js';
 import { maskEmail } from './validate.js';
 
 /** Log without personal data: an event name and non-identifying details only. */
@@ -28,75 +28,35 @@ export async function rateLimited(cfg, ip, now) {
 // ---------- signup ----------
 
 /**
- * Creates or refreshes a pending signup and sends the confirmation email when allowed.
- * The caller always shows the same "check your email" result for accepted requests, whether the
- * address is new, pending or already confirmed, so the form never reveals who is on the list.
+ * Saves a signup straight onto the list (single opt-in: no confirmation email). The caller shows the
+ * same "you're on the list" result whether the address is new or already there, so the form never
+ * reveals who is on the list. A previously unsubscribed address is re-added with fresh consent.
  *
- * @returns {{ result: 'accepted' | 'send_failed', notifyTeam?: string }}
+ * @returns {{ result: 'accepted', notifyTeam?: string }}
  */
-export async function requestSignup(cfg, email, now) {
+export async function saveSignup(cfg, email, now) {
   const hash = await emailHash(cfg.appSecret, email);
   const db = cfg.db;
-  const row = await db.prepare(
-    'SELECT id, status, confirm_sent_count, confirm_window_start, confirm_last_sent_at FROM subscribers WHERE email_hash = ?1',
-  ).bind(hash).first();
-
+  const row = await db.prepare('SELECT id, status FROM subscribers WHERE email_hash = ?1').bind(hash).first();
   if (row && row.status === 'confirmed') {
-    log('signup_already_confirmed');
+    log('signup_already_on_list');
     return { result: 'accepted' };
   }
 
-  // Resend limits for an address that is already pending.
-  let sentCount = 0;
-  let windowStart = now;
-  if (row && row.status === 'pending') {
-    const inWindow = row.confirm_window_start && now - row.confirm_window_start < LIMITS.confirmWindow;
-    sentCount = inWindow ? row.confirm_sent_count : 0;
-    windowStart = inWindow ? row.confirm_window_start : now;
-    const tooSoon = row.confirm_last_sent_at && now - row.confirm_last_sent_at < LIMITS.confirmResendGap;
-    if (tooSoon || sentCount >= LIMITS.confirmMaxPerWindow) {
-      log('signup_resend_suppressed', { reason: tooSoon ? 'too_soon' : 'window_cap' });
-      return { result: 'accepted' };
-    }
-  }
-
   const id = row ? row.id : uuid();
-  const token = randomToken();
-  const tokenHash = await sha256(token);
-  const expires = now + LIMITS.confirmTokenTtl;
-
-  // New, pending or previously unsubscribed: (re)start a pending signup with fresh consent.
   await db.prepare(
     `INSERT INTO subscribers (id, email, email_hash, status, consent_version, consent_at, created_at, updated_at,
-                              confirm_token_hash, confirm_expires_at, confirm_sent_count, confirm_window_start,
-                              confirm_email_status, unsubscribed_at, confirmed_at, team_notify_status, team_notify_attempts)
-     VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?5, ?5, ?6, ?7, ?8, ?9, NULL, NULL, NULL, NULL, 0)
+                              confirmed_at, team_notify_status, team_notify_attempts)
+     VALUES (?1, ?2, ?3, 'confirmed', ?4, ?5, ?5, ?5, ?5, ?6, 0)
      ON CONFLICT (email_hash) DO UPDATE SET
-       email = excluded.email, status = 'pending', consent_version = excluded.consent_version,
-       consent_at = excluded.consent_at, updated_at = excluded.updated_at,
-       confirm_token_hash = excluded.confirm_token_hash, confirm_expires_at = excluded.confirm_expires_at,
-       confirm_sent_count = excluded.confirm_sent_count, confirm_window_start = excluded.confirm_window_start,
-       unsubscribed_at = NULL, confirmed_at = NULL
+       email = excluded.email, status = 'confirmed', consent_version = excluded.consent_version,
+       consent_at = excluded.consent_at, updated_at = excluded.updated_at, confirmed_at = excluded.confirmed_at,
+       confirm_token_hash = NULL, confirm_expires_at = NULL, unsubscribed_at = NULL,
+       team_notify_status = excluded.team_notify_status, team_notify_attempts = 0
      WHERE subscribers.status <> 'confirmed'`,
-  ).bind(id, email, hash, CONSENT_VERSION, now, tokenHash, expires, sentCount, windowStart).run();
-
-  const confirmUrl = `${cfg.siteUrl}/konfirmo?t=${token}`;
-  const msg = confirmationEmail({ siteUrl: cfg.siteUrl, confirmUrl, ttlHours: Math.round(LIMITS.confirmTokenTtl / 3600000) });
-  try {
-    await sendEmail(cfg.email, { to: email, ...msg, idempotencyKey: `confirm-${tokenHash.slice(0, 32)}` });
-  } catch (e) {
-    // Keep the pending record; a later attempt from the form sends a new link. Failed sends don't count.
-    await db.prepare('UPDATE subscribers SET confirm_email_status = ?2, updated_at = ?3 WHERE id = ?1')
-      .bind(id, 'failed', now).run();
-    log('confirm_email_failed', { reason: e.message });
-    return { result: 'send_failed' };
-  }
-  await db.prepare(
-    `UPDATE subscribers SET confirm_email_status = 'sent', confirm_sent_count = confirm_sent_count + 1,
-       confirm_last_sent_at = ?2, updated_at = ?2 WHERE id = ?1`,
-  ).bind(id, now).run();
-  log('confirm_email_sent');
-  return { result: 'accepted', notifyTeam: cfg.teamNotifyOn === 'all' ? id : undefined };
+  ).bind(id, email, hash, CONSENT_VERSION, now, cfg.teamEmail ? 'queued' : null).run();
+  log('subscriber_saved');
+  return { result: 'accepted', notifyTeam: cfg.teamEmail ? id : undefined };
 }
 
 // ---------- confirmation ----------

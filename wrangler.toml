@@ -1,12 +1,11 @@
-# Cloudflare Worker for rregullo.net: static assets from dist/ plus the signup routes. See README.md, "Deploy".
+# Cloudflare Worker for Rregullo: static assets from dist/ plus the signup routes. See README.md, "Setup".
 name = "rregullo"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
-# Served only at rregullo.net (a Worker custom domain); no workers.dev address.
-# www.rregullo.net redirects to it with a Cloudflare redirect rule on the zone.
-workers_dev = false
+# Served at its public workers.dev address for now. rregullo.net is not connected yet: when it is,
+# add it under Settings > Domains & Routes (or a `routes` entry here) and update SITE_URL.
+workers_dev = true
 preview_urls = false
-routes = [{ pattern = "rregullo.net", custom_domain = true }]
 
 [assets]
 directory = "dist"
@@ -21,6 +20,7 @@ enabled = true
 # Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL) are set with
 # `wrangler secret put` or in the dashboard, never here.
 [vars]
+# The public address every email link points at. `npm run deploy:auto` sets it to the workers.dev URL.
 SITE_URL = "https://rregullo.net"
 # Until rregullo.net is verified in Resend this is Resend's test sender, which only delivers to the
 # Resend account's own address. Switch back to "Rregullo <njoftime@rregullo.net>" once it's verified.
@@ -32,6 +32,6 @@ LAUNCH_NOTIFY_ON = "all"
 [[d1_databases]]
 binding = "DB"
 database_name = "rregullo-launch"
-# Paste the id printed by `npx wrangler d1 create rregullo-launch --location=weur`.
+# Filled in by `npm run deploy:auto`, or paste the id printed by `npx wrangler d1 create rregullo-launch --location=weur`.
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"

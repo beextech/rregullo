@@ -9,8 +9,9 @@ pages_build_output_dir = "dist"
 SITE_URL = "https://rregullo.net"
 # The sender must be on a domain verified in Resend (see README). Change the mailbox name if you prefer.
 EMAIL_FROM = "Rregullo <njoftime@rregullo.net>"
-# 'confirmed' (one team email per confirmed signup) or 'all' (also when a signup is requested).
-LAUNCH_NOTIFY_ON = "confirmed"
+# 'all': the team hears about every signup request and every confirmation. 'confirmed': confirmations only.
+# The recipient (LAUNCH_NOTIFICATION_EMAIL) is set as a secret, not here, so it never lands in Git.
+LAUNCH_NOTIFY_ON = "all"
 
 [[d1_databases]]
 binding = "DB"

@@ -141,7 +141,7 @@ Set these under **Pages project > Settings > Variables and Secrets** (type **Sec
 |---|---|
 | `APP_SECRET` | 32+ random characters. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Keep a copy in a password manager: the launch script needs it, and changing it later breaks existing unsubscribe links and duplicate detection. |
 | `RESEND_API_KEY` | The key from step 3 |
-| `LAUNCH_NOTIFICATION_EMAIL` | The team inbox for signup notes. Optional; without it, no notes are sent. |
+| `LAUNCH_NOTIFICATION_EMAIL` | The team inbox for signup notes (the address you gave, set only as a secret so it never appears in the public repo). Without it, no notes are sent. |
 
 Non-secret settings are in `wrangler.toml` `[vars]`:
 
@@ -149,7 +149,7 @@ Non-secret settings are in `wrangler.toml` `[vars]`:
 |---|---|
 | `SITE_URL` | `https://rregullo.net`. Used to build every link in emails. It never comes from the request's Host header. |
 | `EMAIL_FROM` | The sender, from step 3. |
-| `LAUNCH_NOTIFY_ON` | `confirmed` (default) or `all`, which also notes each new request. |
+| `LAUNCH_NOTIFY_ON` | `all` (set): a note for every signup request and every confirmation. `confirmed`: confirmations only. |
 
 For the static page, in `site.config.json` or as build environment variables:
 
@@ -169,7 +169,7 @@ Push to the connected branch, or run `npm run deploy` (`wrangler pages deploy`).
 1. On `https://rregullo.net`, sign up with an inbox you control. You should see *Edhe një hap! Kontrollo emailin për me e konfirmu adresën.*
 2. The email *Konfirmo emailin për lansimin e Rregullo* arrives (check spam). In the email's headers, SPF and DKIM should show `pass`.
 3. Click **Konfirmo emailin**. You should see *Emaili u konfirmua. Do të të lajmërojmë kur Rregullo të jetë gati.*
-4. The team inbox gets *Rregullo: regjistrim i ri i konfirmuar*, with the address masked.
+4. The team inbox gets two notes, both with the address masked: *Rregullo: kërkesë e re për njoftim* after step 1 and *Rregullo: regjistrim i ri i konfirmuar* after this step. Check Gmail's spam folder the first time and mark them "Not spam".
 5. Click the same link again. You should see *Kjo lidhje nuk vlen më.*
 6. Run `node scripts/send-launch.mjs --preview-to <your inbox>` (env as in [Launch day](#launch-day)), then click **Çregjistrohu** in the preview. You should see *U çregjistrove.* The preview's link matches nobody, so nothing changes.
 7. Check the logs under **Pages project > Functions > Real-time logs**: they should show events like `confirm_email_sent` and `subscriber_confirmed`, and no addresses.

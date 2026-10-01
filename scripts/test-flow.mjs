@@ -73,7 +73,7 @@ async function main() {
   const dev = spawn(wrangler, ['pages', 'dev', '--port', String(PORT), '--persist-to', STATE,
     '--binding', `APP_SECRET=${SECRET}`, '--binding', 'RESEND_API_KEY=re_test',
     '--binding', `EMAIL_API_BASE=http://127.0.0.1:${MAIL_PORT}`, '--binding', `SITE_URL=${BASE}`,
-    '--binding', 'LAUNCH_NOTIFICATION_EMAIL=team@example.test'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost' } });
+    '--binding', 'LAUNCH_NOTIFICATION_EMAIL=team@example.test', '--binding', 'LAUNCH_NOTIFY_ON=all'], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost' } });
   let devLog = '';
   dev.stdout.on('data', (d) => { devLog += d; });
   dev.stderr.on('data', (d) => { devLog += d; });
@@ -203,9 +203,13 @@ async function main() {
       assert(m.text.includes(`${BASE}/konfirmo?t=`) && m.text.includes(`${BASE}/privatesia`), 'links in text part');
       assert(m.from.includes('Rregullo'), 'sender');
     });
-    await check('10. team notification goes only to LAUNCH_NOTIFICATION_EMAIL', async () => {
+    await check('10. team notifications: one on signup, one on confirmation, only to LAUNCH_NOTIFICATION_EMAIL', async () => {
       const team = inbox.filter((m) => m.to[0] === 'team@example.test');
-      assert(team.length === 1, `team emails: ${team.length}`);
+      const requested = team.filter((m) => m.subject === 'Rregullo: kërkesë e re për njoftim');
+      const confirmed = team.filter((m) => m.subject === 'Rregullo: regjistrim i ri i konfirmuar');
+      assert(confirmed.length === 1, `confirmation notes: ${confirmed.length}`);
+      assert(requested.length >= 1 && requested[0].text.includes('Në pritje të konfirmimit') && requested[0].text.includes('a***@e***.com'), 'signup note');
+      assert(team.every((m) => !/[a-z0-9.]+@example\.com/.test(m.text)), 'a full address appears in a team note');
     });
     await check('12a. provider outage: error shown, record kept, retry sends a fresh link', async () => {
       mail.setFail(true);

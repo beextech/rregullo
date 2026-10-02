@@ -5,7 +5,7 @@
 // and stops everything again.
 
 import { spawn, execFileSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMockEmail } from './mock-email.mjs';
@@ -137,6 +137,35 @@ async function main() {
     await check('6c. cross-site post (other Origin): refused', async () => {
       const r = await subscribe({ email: 'csrf@example.com', consent: true }, { origin: 'https://evil.example' });
       assert(r.status === 403, `status ${r.status}`);
+      const lookalike = await subscribe({ email: 'csrf@example.com', consent: true }, { origin: `http://localhost.evil.example:${PORT}` });
+      assert(lookalike.status === 403, `lookalike status ${lookalike.status}`);
+    });
+    await check('6f. page opened over http:// (request upgraded to https://): accepted and saved on the first post', async () => {
+      // wrangler dev rewrites the Origin and URL to one scheme, so this calls the handler directly, the way production
+      // sees it: Origin http://rregullo.net, URL https://rregullo.net/api/subscribe (Cloudflare ray a44225594ec2d0f7).
+      const { getPlatformProxy } = await import('wrangler');
+      const { onRequestPost } = await import('../functions/api/subscribe.js');
+      const proxy = await getPlatformProxy({ persist: false });
+      try {
+        const db = proxy.env.DB;
+        const schema = readFileSync(join(root, 'migrations', '0001_subscribers.sql'), 'utf8');
+        for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
+        const env = { DB: db, SITE_URL: 'https://rregullo.net', APP_SECRET: SECRET, RESEND_API_KEY: 're_test', EMAIL_FROM: 'test@example.test' };
+        const post = (origin, ip) => onRequestPost({ env, waitUntil() {}, request: new Request('https://rregullo.net/api/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin, 'CF-Connecting-IP': ip },
+          body: 'email=scheme%40example.com&consent=true',
+        }) });
+        const r = await post('http://rregullo.net', freshIp());
+        assert(r.status === 200 && (await r.text()).includes('Faleminderit!'), `status ${r.status}`);
+        const row = await db.prepare("SELECT status, consent_version FROM subscribers WHERE email = 'scheme@example.com'").first();
+        assert(row && row.status === 'confirmed' && row.consent_version === 'launch-notify-v1', 'stored');
+        for (const bad of ['https://evil.example', 'http://rregullo.net.evil.example', 'null']) {
+          assert((await post(bad, freshIp())).status === 403, `${bad} refused`);
+        }
+      } finally {
+        await proxy.dispose();
+      }
     });
     await check('6d. oversized body: refused', async () => {
       const r = await subscribe({ email: 'big@example.com', consent: true, pad: 'x'.repeat(5000) });

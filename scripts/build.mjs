@@ -105,6 +105,10 @@ let notFound = readFileSync(join(src, '404.html'), 'utf8');
 notFound = common(notFound).replace('<!-- @sprite -->', sprite);
 writeFileSync(join(dist, '404.html'), notFound);
 
+// The /loja mini-game links the shared stylesheet, so it gets the same cache-busting hash.
+const loja = join(dist, 'loja', 'index.html');
+if (existsSync(loja)) writeFileSync(loja, common(readFileSync(loja, 'utf8')));
+
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
   `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
@@ -114,7 +118,7 @@ if (siteUrl) {
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html']) {
+for (const file of ['index.html', '404.html', 'privatesia.html', 'loja/index.html']) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

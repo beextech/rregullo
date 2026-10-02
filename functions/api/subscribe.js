@@ -23,13 +23,19 @@ function reply(asHtml, status, data) {
   });
 }
 
+function originHost(origin) {
+  try { return new URL(origin).host; } catch { return null; }
+}
+
 export async function onRequestPost({ request, env, waitUntil }) {
   const ctype = request.headers.get('Content-Type') || '';
   const asHtml = !ctype.includes('application/json');
 
-  // Same-origin only: a cross-site page can't post this form on someone's behalf.
+  // Same-site only: a cross-site page can't post this form on someone's behalf. Hosts are compared, not
+  // schemes: a page opened over plain http:// posts with an http:// Origin once the browser has upgraded
+  // the request itself to https://, and that is still this site.
   const origin = request.headers.get('Origin');
-  if (origin && origin !== new URL(request.url).origin) {
+  if (origin && originHost(origin) !== new URL(request.url).host) {
     return reply(asHtml, 403, { ok: false, message: MESSAGES.generic });
   }
 

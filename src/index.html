@@ -57,7 +57,9 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/teaser.css">
 <script type="module" src="/site.js?v={{JS_HASH}}"></script>
+<script type="module" src="/teaser.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Kalo te përmbajtja</a>
@@ -131,6 +133,40 @@
         Shiko sërish
       </button>
     </div>
+  </section>
+
+  <section class="teaser reveal" aria-labelledby="teaser-title">
+    <a class="teaser-link" href="/loja/">
+      <span class="teaser-art" data-teaser-art aria-hidden="true">
+        <svg viewBox="0 0 120 140" focusable="false">
+          <defs>
+            <radialGradient id="tzGlow" cx="70" cy="80" r="64" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#25282D"/><stop offset="1" stop-color="#16171A" stop-opacity="0"/></radialGradient>
+            <linearGradient id="tzChrome" x1="0" x2="1"><stop offset="0" stop-color="#2A2D31"/><stop offset=".25" stop-color="#C6CACC"/><stop offset=".35" stop-color="#ECEEEB"/><stop offset=".6" stop-color="#4E535A"/><stop offset=".85" stop-color="#9DA2A7"/><stop offset="1" stop-color="#3A3E43"/></linearGradient>
+            <radialGradient id="tzDropFill" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#DDE7EA" stop-opacity=".1"/><stop offset=".62" stop-color="#C9D6DB" stop-opacity=".22"/><stop offset="1" stop-color="#F1F2EF" stop-opacity=".75"/></radialGradient>
+            <mask id="tzSpout" maskUnits="userSpaceOnUse" x="-20" y="0" width="140" height="80"><path d="M-14 20H30C56 20 70 34 70 54V62" fill="none" stroke="#fff" stroke-width="15"/></mask>
+          </defs>
+          <rect x="0" y="0" width="120" height="140" fill="url(#tzGlow)"/>
+          <g mask="url(#tzSpout)">
+            <path d="M-14 20H30C56 20 70 34 70 54V62" fill="none" stroke="#4E535A" stroke-width="15"/>
+            <path d="M-14 20H30C56 20 70 34 70 54V62" fill="none" stroke="#9AA0A5" stroke-width="9" transform="translate(-3 -3)"/>
+            <path d="M-14 20H30C56 20 70 34 70 54V62" fill="none" stroke="#EEF0ED" stroke-width="3" transform="translate(-4 -4)"/>
+            <path d="M-14 20H30C56 20 70 34 70 54V62" fill="none" stroke="#2A2D32" stroke-width="4" transform="translate(4 4)"/>
+          </g>
+          <rect x="61" y="60" width="18" height="14" rx="1.5" fill="url(#tzChrome)"/>
+          <ellipse cx="70" cy="74" rx="9" ry="2.8" fill="#141518"/>
+          <ellipse cx="70" cy="128" rx="0" ry="0" class="tz-ripple" opacity="0" data-tz-ring/>
+          <ellipse cx="70" cy="128" rx="0" ry="0" class="tz-ripple" opacity="0" data-tz-ring/>
+          <path class="tz-drop" data-tz-fall opacity="0" d="M0 -6.6C2 -3.6 4.3 -1.4 4.3 1A4.3 3.9 0 0 1 -4.3 1C-4.3 -1.4 -2 -3.6 0 -6.6Z"/>
+          <path class="tz-drop" data-tz-hang transform="translate(70 74.5)" d="M-2 0C-2 1.5-4.4 2.9-4.4 4.8A4.4 4.4 0 1 0 4.4 4.8C4.4 2.9 2 1.5 2 0Z"/>
+        </svg>
+      </span>
+      <span class="teaser-copy">
+        <span class="label">Pak problem n’shpi?</span>
+        <span class="teaser-title" id="teaser-title" role="heading" aria-level="2">Ni rubinet që pikon. A po din me ja nal?</span>
+        <span class="teaser-text">Hyn e provoje lojën e vogël që e kemi përgatitë.</span>
+      </span>
+      <span class="teaser-cta">Nale pikimin<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 12h13m-5-5.5L18.5 12 13 17.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </a>
   </section>
 
   <section class="about reveal" aria-labelledby="about-title">

@@ -11,8 +11,8 @@
 // domain. Nothing here is secret: secrets belong to the Functions (see .dev.vars.example).
 
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,9 +105,13 @@ let notFound = readFileSync(join(src, '404.html'), 'utf8');
 notFound = common(notFound).replace('<!-- @sprite -->', sprite);
 writeFileSync(join(dist, '404.html'), notFound);
 
-// The /loja mini-game links the shared stylesheet, so it gets the same cache-busting hash.
-const loja = join(dist, 'loja', 'index.html');
-if (existsSync(loja)) writeFileSync(loja, common(readFileSync(loja, 'utf8')));
+// /loja (the game catalog) and every game under it (/loja/<slug>/) link the shared stylesheet, so they get
+// the same cache-busting hash. A new game is picked up here just by adding src/loja/<slug>/index.html.
+const lojaPages = existsSync(join(dist, 'loja'))
+  ? readdirSync(join(dist, 'loja'), { recursive: true }).filter((f) => f === 'index.html' || f.endsWith('/index.html'))
+    .map((f) => relative(dist, join(dist, 'loja', f)))
+  : [];
+for (const file of lojaPages) writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8')));
 
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
@@ -118,7 +122,7 @@ if (siteUrl) {
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', 'loja/index.html']) {
+for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

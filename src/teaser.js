@@ -40,3 +40,37 @@ if (art) {
   document.addEventListener('visibilitychange', start);
   reduce.addEventListener?.('change', () => { if (reduce.matches) drawHang(.85); else start(); });
 }
+
+// Level teaser: the bubble in the O drifts off, then the level comes true and it settles between the lines
+// (the ident easing). It rests there a while before the next nudge. Reduced motion: it simply sits centred.
+const levelArt = document.querySelector('[data-zhive-art]');
+if (levelArt) {
+  const bubble = levelArt.querySelector('[data-zt-bubble]');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const f = (n) => Math.round(n * 100) / 100;
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  const swing = (t) => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+  // one cycle: rest centred, glide out to one side, settle back
+  let side = -1, from = 0, to = 0, t0 = 0, dur = 1, rest = true, raf = 0, visible = false;
+  const set = (x) => bubble.setAttribute('transform', `translate(${f(x)} 0)`);
+  const next = (now) => {
+    t0 = now; from = to; rest = !rest;
+    if (rest) { dur = to === 0 ? 1.8 + Math.random() * 1.4 : .45; return; }
+    if (from === 0) { side = -side; to = side * (10 + Math.random() * 5); dur = 1.3; }
+    else { to = 0; dur = 1.2; }
+  };
+  const frame = (now) => {
+    raf = 0;
+    const t = Math.min(1, (now - t0) / 1000 / dur);
+    if (!rest) set(from + (to - from) * (to === 0 ? ease(t) : swing(t)));
+    if (t >= 1) next(now);
+    if (visible && !document.hidden) raf = requestAnimationFrame(frame);
+  };
+  const start = () => { if (!raf && visible && !reduce.matches) { t0 = performance.now(); raf = requestAnimationFrame(frame); } };
+  set(0);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((es) => { visible = es[0].isIntersecting; if (visible) start(); }).observe(levelArt);
+  }
+  document.addEventListener('visibilitychange', start);
+  reduce.addEventListener?.('change', () => { if (reduce.matches) { to = 0; set(0); } else start(); });
+}

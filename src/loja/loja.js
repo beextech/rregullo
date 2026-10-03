@@ -1,4 +1,4 @@
-// "Prej një rubineti që pikon…": a leaking tap you can fix in two moves.
+// "Prej një çeshmeje që pikon…": a leaking tap you can fix in two moves.
 // 1. Close the tap: it slows, but it still drips. 2. Tighten the loose bonnet nut with a spanner, three strokes.
 // One requestAnimationFrame loop runs on a game clock; every timer is a tween on that clock, so a reset
 // clears everything at once and nothing can fire after it. The scene is SVG drawn in a light 2.5D projection.
@@ -22,8 +22,8 @@ const STROKE_FROM = 60, STROKE_TO = 0; // spanner angle (degrees) at the start a
 
 // Copy. Kosovo Albanian, short, in the site's voice.
 const COPY = {
-  close: ['Mbylle rubinetin.', 'Tërhiqe dorezën djathtas, ose prek mbi të.'],
-  wrongWay: ['Mbylle rubinetin.', 'Nga ana tjetër: djathtas.'],
+  close: ['Mbylle çeshmen.', 'Tërhiqe dorezën djathtas, ose prek mbi të.'],
+  wrongWay: ['Mbylle çeshmen.', 'Nga ana tjetër: djathtas.'],
   stillDrips: ['Prapë pikon.', 'Dadoja nën dorezë s’është shtrënguar mirë. Shtrëngoje me çelës.'],
   stroke1: ['Edhe pak.', 'Tërhiqe çelësin djathtas, ose prek mbi të.'],
   stroke2: ['Edhe një herë.', 'Tërhiqe çelësin djathtas, ose prek mbi të.'],

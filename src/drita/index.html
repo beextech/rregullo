@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drita | Rregullo</title>
+<meta name="description" content="Një lojë e shkurtër nga Rregullo: një llambë e prishur. Hiqe, vendose të renë dhe ndize dritën.">
+<meta name="robots" content="noindex">
+<link rel="canonical" href="{{ASSET_BASE}}/drita/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="sq_XK">
+<meta property="og:site_name" content="Rregullo">
+<meta property="og:url" content="{{ASSET_BASE}}/drita/">
+<meta property="og:title" content="Drita | Rregullo">
+<meta property="og:description" content="Një lojë e shkurtër nga Rregullo: një llambë e prishur. Hiqe, vendose të renë dhe ndize dritën.">
+<meta property="og:image" content="{{ASSET_BASE}}/media/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Logoja e Rregullo në sfond të errët">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Drita | Rregullo">
+<meta name="twitter:description" content="Një lojë e shkurtër nga Rregullo: një llambë e prishur. Hiqe, vendose të renë dhe ndize dritën.">
+<meta name="twitter:image" content="{{ASSET_BASE}}/media/og-image.png">
+<meta name="theme-color" content="#16171A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/loja/loja.css">
+<link rel="stylesheet" href="/drita/drita.css">
+<script type="module" src="/drita/drita.js"></script>
+</head>
+<body class="nd-page">
+<!-- the room: warms up when the light comes on -->
+<div class="nd-ambient" aria-hidden="true"></div>
+<a class="skip" href="#drita">Kalo te loja</a>
+
+<header class="top">
+  <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
+    <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
+  </a>
+  <button class="sound-toggle" type="button" aria-pressed="false" data-sound hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor"/><path class="wave" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.6a7.6 7.6 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path class="mute" d="M16 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+    <span data-sound-label>Zëri: fikur</span>
+  </button>
+</header>
+
+<main id="drita" class="nd" data-drita data-phase="unscrew">
+  <div class="nd-stage" data-stage>
+    <!-- One scene, one coordinate box (400 × 560). The fixture hangs from the top; the bulb's own origin is the top of
+         its screw base. The logo is the site's own artwork (#rg-logo), revealed by the light, never redrawn. -->
+    <svg class="nd-scene" viewBox="70 20 260 470" preserveAspectRatio="xMidYMin meet" data-scene aria-hidden="false" role="group" aria-label="Një llambë e varur nga tavani. Llamba është e djegur.">
+      <defs>
+        <radialGradient id="ndHalo" cx="200" cy="247" r="250" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#FFE3AE" stop-opacity=".46"/>
+          <stop offset=".18" stop-color="#FFCB7E" stop-opacity=".22"/>
+          <stop offset=".5" stop-color="#F2A456" stop-opacity=".07"/>
+          <stop offset="1" stop-color="#E08A3C" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ndPool" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#FFCF8A" stop-opacity=".2"/>
+          <stop offset=".6" stop-color="#F5AE5E" stop-opacity=".06"/>
+          <stop offset="1" stop-color="#F5AE5E" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ndBloom" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#FFFBF0" stop-opacity="1"/>
+          <stop offset=".22" stop-color="#FFEBC4" stop-opacity=".85"/>
+          <stop offset=".5" stop-color="#FFC876" stop-opacity=".3"/>
+          <stop offset="1" stop-color="#FFB45C" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ndRevealFade" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#fff"/>
+          <stop offset=".72" stop-color="#fff"/>
+          <stop offset="1" stop-color="#000"/>
+        </radialGradient>
+        <mask id="ndReveal" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="760">
+          <circle cx="200" cy="247" r="0" fill="url(#ndRevealFade)" data-reveal/>
+        </mask>
+        <linearGradient id="ndCord" x1="0" x2="0" y1="-10" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#2B2D31" stop-opacity="0"/>
+          <stop offset="1" stop-color="#2B2D31"/>
+        </linearGradient>
+        <!-- aged, brushed brass: muted, with one soft highlight -->
+        <linearGradient id="ndBrass" x1="0" x2="1">
+          <stop offset="0" stop-color="#2C2822"/>
+          <stop offset=".18" stop-color="#6A5D48"/>
+          <stop offset=".3" stop-color="#B7A27D"/>
+          <stop offset=".38" stop-color="#8C7B5E"/>
+          <stop offset=".62" stop-color="#4A4134"/>
+          <stop offset=".84" stop-color="#776951"/>
+          <stop offset="1" stop-color="#2A261F"/>
+        </linearGradient>
+        <linearGradient id="ndBrassDark" x1="0" x2="1">
+          <stop offset="0" stop-color="#22201B"/>
+          <stop offset=".3" stop-color="#8E7E61"/>
+          <stop offset=".42" stop-color="#5E5341"/>
+          <stop offset=".8" stop-color="#5A503F"/>
+          <stop offset="1" stop-color="#1F1D19"/>
+        </linearGradient>
+        <pattern id="ndKnurl" width="3" height="14" patternUnits="userSpaceOnUse">
+          <rect width="1.2" height="14" fill="#000" fill-opacity=".38"/>
+          <rect x="1.2" width=".5" height="14" fill="#fff" fill-opacity=".1"/>
+        </pattern>
+        <linearGradient id="ndWarmUnder" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="#FFD89A" stop-opacity="0"/>
+          <stop offset="1" stop-color="#FFD89A" stop-opacity=".75"/>
+        </linearGradient>
+        <!-- the screw base: zinc-plated, cooler than the brass -->
+        <linearGradient id="ndZinc" x1="0" x2="1">
+          <stop offset="0" stop-color="#4A4D51"/>
+          <stop offset=".24" stop-color="#B9BDC0"/>
+          <stop offset=".34" stop-color="#E6E8E8"/>
+          <stop offset=".55" stop-color="#7D8186"/>
+          <stop offset=".82" stop-color="#A4A8AC"/>
+          <stop offset="1" stop-color="#43464A"/>
+        </linearGradient>
+        <clipPath id="ndThreadClip"><rect x="-13" y="0" width="26" height="25.5"/></clipPath>
+        <radialGradient id="ndGlassOff" cx=".38" cy=".62" r=".7">
+          <stop offset="0" stop-color="#E9ECEE" stop-opacity=".02"/>
+          <stop offset=".7" stop-color="#D5DADF" stop-opacity=".05"/>
+          <stop offset="1" stop-color="#F1F2EF" stop-opacity=".16"/>
+        </radialGradient>
+        <radialGradient id="ndGlassLit" cx=".5" cy=".62" r=".62">
+          <stop offset="0" stop-color="#FFF9EC"/>
+          <stop offset=".45" stop-color="#FFE4B0" stop-opacity=".95"/>
+          <stop offset=".85" stop-color="#FFC271" stop-opacity=".8"/>
+          <stop offset="1" stop-color="#F29D45" stop-opacity=".7"/>
+        </radialGradient>
+        <radialGradient id="ndSoot" cx=".5" cy=".3" r=".6">
+          <stop offset="0" stop-color="#1E1811" stop-opacity=".95"/>
+          <stop offset=".55" stop-color="#33281D" stop-opacity=".6"/>
+          <stop offset="1" stop-color="#3A2E22" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="ndSpark" cx=".5" cy=".5" r=".5">
+          <stop offset="0" stop-color="#FFF6DC"/>
+          <stop offset=".4" stop-color="#FFC66E" stop-opacity=".7"/>
+          <stop offset="1" stop-color="#FF9A3C" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="ndSpec" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+          <stop offset=".35" stop-color="#fff" stop-opacity=".42"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </linearGradient>
+
+        <!-- One bulb, drawn once and used twice (the burnt one and the new one). Origin: top of the screw base. -->
+        <g id="ndBulbBase">
+          <rect x="-13" y="0" width="26" height="25.5" rx="1.5" fill="url(#ndZinc)"/>
+        </g>
+        <path id="ndGlassShape" d="M-11 31C-11 43-34 51-34 77A34 34 0 0 0 34 77C34 51 11 43 11 31Z"/>
+      </defs>
+
+      <!-- light the room: behind everything -->
+      <circle class="nd-halo" cx="200" cy="247" r="250" fill="url(#ndHalo)" opacity="0" data-halo/>
+      <ellipse class="nd-pool" cx="200" cy="452" rx="150" ry="26" fill="url(#ndPool)"/>
+
+      <!-- the logo was in the room all along; the light finds it -->
+      <use class="nd-logo-ghost" href="#rg-logo" x="80" y="332" width="240" height="76"/>
+      <g mask="url(#ndReveal)">
+        <use class="nd-logo" href="#rg-logo" x="80" y="332" width="240" height="76" opacity="0" data-logo/>
+      </g>
+
+      <g class="nd-motes" aria-hidden="true">
+        <circle cx="150" cy="300" r="1.1"/><circle cx="246" cy="330" r=".8"/><circle cx="178" cy="214" r=".7"/>
+        <circle cx="262" cy="262" r="1.2"/><circle cx="128" cy="236" r=".8"/><circle cx="222" cy="388" r=".9"/>
+        <circle cx="286" cy="300" r=".7"/>
+      </g>
+
+      <!-- guides -->
+      <g class="nd-arc" data-arc>
+        <path d="M242 0A42 11 0 0 1 158 0" fill="none" stroke="#F1F2EF" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1 5"/>
+        <path d="M165.5 -6.5L157.5 .2 166.5 4.5" fill="none" stroke="#F1F2EF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <g class="nd-target" data-target>
+        <use href="#ndGlassShape" transform="translate(200 182)" fill="none" stroke="#F1F2EF" stroke-opacity=".28" stroke-width="1" stroke-dasharray="2 4"/>
+        <ellipse cx="200" cy="187" rx="30" ry="6" fill="none" stroke="#ABE23F" stroke-width="1.4"/>
+      </g>
+      <ellipse class="nd-shadow" cx="290" cy="476" rx="27" ry="4.5" fill="#000" opacity="0" data-shadow/>
+
+      <!-- the bulbs: drawn behind the socket, so their screw bases disappear into it -->
+      <g class="nd-bulb is-broken" data-bulb="old" transform="translate(200 170)">
+        <g class="nd-bulb-art">
+          <use href="#ndBulbBase"/>
+          <g clip-path="url(#ndThreadClip)"><g class="nd-threads" data-threads>
+            <path d="M-14-6.5C-6-3.5 6-2.9 14-4.1M-14 0C-6 3 6 3.6 14 2.4M-14 6.5C-6 9.5 6 10.1 14 8.9M-14 13C-6 16 6 16.6 14 15.4M-14 19.5C-6 22.5 6 23.1 14 21.9M-14 26C-6 29 6 29.6 14 28.4" fill="none" stroke="#1E2023" stroke-opacity=".55" stroke-width="1.7"/>
+            <path d="M-14-5.2C-6-2.2 6-1.6 14-2.8M-14 1.3C-6 4.3 6 4.9 14 3.7M-14 7.8C-6 10.8 6 11.4 14 10.2M-14 14.3C-6 17.3 6 17.9 14 16.7M-14 20.8C-6 23.8 6 24.4 14 23.2M-14 27.3C-6 30.3 6 30.9 14 29.7" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width=".6"/>
+          </g></g>
+          <rect x="-13.6" y="24.6" width="27.2" height="2.6" rx="1.3" fill="#8D9195"/>
+          <path d="M-10.5 27.2H10.5L9 31.4H-9Z" fill="#141517"/>
+          <use class="nd-glass" href="#ndGlassShape"/>
+          <use class="nd-glass-lit" href="#ndGlassShape" fill="url(#ndGlassLit)" opacity="0" data-lit-glass/>
+          <ellipse cx="0" cy="45" rx="17" ry="12" fill="url(#ndSoot)"/>
+          <ellipse cx="-8" cy="38" rx="6" ry="4" fill="#20180F" fill-opacity=".35"/>
+          <path d="M-3.6 31.4L-1.5 57H1.5L3.6 31.4Z" fill="#DCE2E8" fill-opacity=".13"/>
+          <path d="M0 57V99" stroke="#C9CDD1" stroke-opacity=".3" stroke-width=".6"/>
+          <g class="nd-strands" data-strands><path/><path/><path/><path/></g>
+          <circle class="nd-spark" cx="0" cy="0" r="4" fill="url(#ndSpark)" opacity="0" data-spark/>
+          <circle class="nd-bloom" cx="0" cy="78" r="64" fill="url(#ndBloom)" opacity="0" data-bloom/>
+          <path d="M-24.5 58C-30 70-29.5 86-21.5 97.5" fill="none" stroke="url(#ndSpec)" stroke-width="2.6" stroke-linecap="round"/>
+          <circle cx="-17.5" cy="55.5" r="1.5" fill="#fff" fill-opacity=".45"/>
+          <path d="M26 57C32.5 69 32.8 87 25 99" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="1.2" stroke-linecap="round"/>
+        </g>
+        <rect class="nd-hit" x="-60" y="-6" width="120" height="132" rx="48" fill="transparent" tabindex="0" role="button"
+              aria-label="Llamba e djegur. Rrotulloje majtas me shigjetën majtas, ose shtyp Enter." data-hit/>
+      </g>
+
+      <g class="nd-bulb is-new" data-bulb="new" transform="translate(290 352)" opacity="0">
+        <g class="nd-bulb-art">
+          <use href="#ndBulbBase"/>
+          <g clip-path="url(#ndThreadClip)"><g class="nd-threads" data-threads>
+            <path d="M-14-6.5C-6-3.5 6-2.9 14-4.1M-14 0C-6 3 6 3.6 14 2.4M-14 6.5C-6 9.5 6 10.1 14 8.9M-14 13C-6 16 6 16.6 14 15.4M-14 19.5C-6 22.5 6 23.1 14 21.9M-14 26C-6 29 6 29.6 14 28.4" fill="none" stroke="#1E2023" stroke-opacity=".55" stroke-width="1.7"/>
+            <path d="M-14-5.2C-6-2.2 6-1.6 14-2.8M-14 1.3C-6 4.3 6 4.9 14 3.7M-14 7.8C-6 10.8 6 11.4 14 10.2M-14 14.3C-6 17.3 6 17.9 14 16.7M-14 20.8C-6 23.8 6 24.4 14 23.2M-14 27.3C-6 30.3 6 30.9 14 29.7" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width=".6"/>
+          </g></g>
+          <rect x="-13.6" y="24.6" width="27.2" height="2.6" rx="1.3" fill="#8D9195"/>
+          <path d="M-10.5 27.2H10.5L9 31.4H-9Z" fill="#141517"/>
+          <use class="nd-glass" href="#ndGlassShape"/>
+          <use class="nd-glass-lit" href="#ndGlassShape" fill="url(#ndGlassLit)" opacity="0" data-lit-glass/>
+          <path d="M-3.6 31.4L-1.5 57H1.5L3.6 31.4Z" fill="#DCE2E8" fill-opacity=".13"/>
+          <path d="M0 57V99" stroke="#C9CDD1" stroke-opacity=".3" stroke-width=".6"/>
+          <g class="nd-strands" data-strands><path/><path/><path/><path/></g>
+          <circle class="nd-bloom" cx="0" cy="78" r="64" fill="url(#ndBloom)" opacity="0" data-bloom/>
+          <path d="M-24.5 58C-30 70-29.5 86-21.5 97.5" fill="none" stroke="url(#ndSpec)" stroke-width="2.6" stroke-linecap="round"/>
+          <circle cx="-17.5" cy="55.5" r="1.5" fill="#fff" fill-opacity=".55"/>
+          <path d="M26 57C32.5 69 32.8 87 25 99" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="1.2" stroke-linecap="round"/>
+        </g>
+        <rect class="nd-hit" x="-60" y="-14" width="120" height="146" rx="48" fill="transparent" tabindex="-1" role="button"
+              aria-label="Llamba e re. Shtyp Enter për ta vendosur te mbajtësja." data-hit/>
+      </g>
+
+      <!-- the fixture: cord, brass socket. It swings a little from above when the bulb is handled. -->
+      <g class="nd-fixture" data-fixture>
+        <path d="M200-12V112" stroke="url(#ndCord)" stroke-width="3.4"/>
+        <path d="M200 20V112" stroke="#fff" stroke-opacity=".07" stroke-width="3" stroke-dasharray="1.3 1.7"/>
+        <rect x="195" y="108" width="10" height="17" rx="2" fill="url(#ndBrassDark)"/>
+        <path d="M183.5 123H216.5C219.5 123 222 125.5 222 128.5V173H178V128.5C178 125.5 180.5 123 183.5 123Z" fill="url(#ndBrass)"/>
+        <path d="M178 133.5H222M178 138H222" stroke="#000" stroke-opacity=".35" stroke-width="1"/>
+        <path d="M178 134.6H222M178 139.1H222" stroke="#fff" stroke-opacity=".08" stroke-width=".7"/>
+        <rect x="175" y="172" width="50" height="14" rx="2.5" fill="url(#ndBrassDark)"/>
+        <rect x="175" y="172" width="50" height="14" rx="2.5" fill="url(#ndKnurl)"/>
+        <path d="M177.5 172.6H222.5" stroke="#fff" stroke-opacity=".14" stroke-width=".8"/>
+        <ellipse cx="200" cy="186" rx="22" ry="2" fill="#0C0D0F"/>
+        <!-- lit from below once the bulb is on -->
+        <g class="nd-fixture-lit" opacity="0" data-fixture-lit>
+          <rect x="175" y="178" width="50" height="8" rx="2.5" fill="url(#ndWarmUnder)"/>
+          <path d="M178.6 160V172M221.4 160V172" stroke="#FFD89A" stroke-opacity=".35" stroke-width="1.2"/>
+          <path d="M200 70V108" stroke="#FFD89A" stroke-opacity=".18" stroke-width="3.4"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="nd-panel">
+    <p class="visually-hidden" aria-live="polite" data-announce></p>
+    <div class="nd-play" data-panel="play">
+      <h1 class="eyebrow nd-name">Drita</h1>
+      <p class="nd-prompt">Diçka nuk po shkon. A e rregullon?</p>
+      <p class="hint nd-hint" data-hint>Kape llambën dhe rrotulloje majtas.</p>
+    </div>
+    <div class="nd-done is-off" data-panel="done" aria-hidden="true" inert>
+      <h2 class="nd-final" tabindex="-1" data-done-head>Kur diçka prishet, Rregullo e gjen zgjidhjen.</h2>
+      <p class="nd-sub">Gjej mjeshtrin e duhur për shtëpinë tënde.</p>
+      <div class="nd-actions">
+        <a class="btn btn-primary" href="/#lajmerimi">Gjej një mjeshtër</a>
+        <button class="btn btn-quiet" type="button" data-replay>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 3.5v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Luaje përsëri
+        </button>
+      </div>
+      <p class="nd-more"><a href="/loja/">Krejt lojërat</a></p>
+    </div>
+    <noscript><p class="hint nd-noscript">Kjo lojë ka nevojë për JavaScript. <a href="/">Kthehu te faqja kryesore</a>.</p></noscript>
+  </div>
+</main>
+
+<footer class="foot">
+  <svg class="foot-o" viewBox="0 0 148 139" aria-hidden="true" focusable="false"><use href="#rg-o"/></svg>
+  <p>Rregullo · Së shpejti në Kosovë · <a href="/loja/">Lojërat</a> · <a href="/">Faqja kryesore</a></p>
+</footer>
+
+<!-- @sprite -->
+</body>
+</html>

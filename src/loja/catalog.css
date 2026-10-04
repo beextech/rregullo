@@ -67,6 +67,14 @@
 .game:hover .art-bubble, .game:focus-within .art-bubble { transform: none; }
 @media (hover: none) { .art-bubble { transform: none; } }
 
+/* Drita: the bulb comes on when you point at the card */
+.game-art .art-bulb { height: 86%; }
+.art-strand { stroke: #7A6548; transition: stroke .5s var(--ease-out); }
+.art-bulb-lit, .art-bulb-glow { opacity: 0; transition: opacity .6s var(--ease-out); }
+.game:hover .art-bulb-lit, .game:focus-within .art-bulb-lit { opacity: .92; }
+.game:hover .art-bulb-glow, .game:focus-within .art-bulb-glow { opacity: 1; }
+.game:hover .art-strand, .game:focus-within .art-strand { stroke: #FFF4D6; }
+
 @media (max-width: 480px) {
   .game-body { padding: 20px 20px 22px; }
   .game-cta { align-self: stretch; justify-content: center; }

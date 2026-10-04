@@ -113,6 +113,12 @@ const lojaPages = existsSync(join(dist, 'loja'))
   : [];
 for (const file of lojaPages) writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8')));
 
+// /drita (the light-bulb game) has its own top-level route. It takes the homepage's brand sprite, like the privacy page.
+const gamePages = ['drita/index.html'].filter((f) => existsSync(join(dist, f)));
+for (const file of gamePages) {
+  writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8')).replace('<!-- @sprite -->', sprite));
+}
+
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
   `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
@@ -122,7 +128,7 @@ if (siteUrl) {
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages]) {
+for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages, ...gamePages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

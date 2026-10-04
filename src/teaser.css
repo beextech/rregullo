@@ -1,4 +1,4 @@
-/* Homepage teasers for the /loja games (Çeshme t’piki, Qite n’zhivë!). Sit right below the hero signup, in the same frame. */
+/* Homepage teasers for the games (Çeshme t’piki, Qite n’zhivë!, Drita). Sit right below the hero signup, in the same frame. */
 
 .teaser {
   max-width: calc(var(--max) + 2 * var(--gutter)); margin: 0 auto;
@@ -33,6 +33,13 @@
 
 .tz-drop { fill: url(#tzDropFill); stroke: rgba(241, 242, 239, .6); stroke-width: .6; }
 .tz-ripple { fill: none; stroke: #F1F2EF; stroke-width: .8; }
+
+/* Drita: the bulb is out until you point at it, then it comes on */
+.tz-strand { stroke: #7A6548; transition: stroke .5s var(--ease-out); }
+.tz-bulb-lit, .tz-bulb-glow { opacity: 0; transition: opacity .6s var(--ease-out); }
+.teaser-link:hover .tz-bulb-lit, .teaser-link:focus-visible .tz-bulb-lit { opacity: .92; }
+.teaser-link:hover .tz-bulb-glow, .teaser-link:focus-visible .tz-bulb-glow { opacity: 1; }
+.teaser-link:hover .tz-strand, .teaser-link:focus-visible .tz-strand { stroke: #FFF4D6; }
 
 @media (max-width: 720px) {
   .teaser-link { grid-template-columns: 76px minmax(0, 1fr); align-items: start; gap: 16px 20px; }

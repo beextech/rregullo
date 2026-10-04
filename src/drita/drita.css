@@ -1,0 +1,110 @@
+/* Rregullo: "Drita". Builds on site.css (tokens, header, buttons, footer) and loja.css (sound switch, hint, quiet button). */
+
+.nd-page { position: relative; min-height: 100svh; display: flex; flex-direction: column; overflow-x: hidden; }
+.nd-page > .top, .nd-page > main, .nd-page > .foot { position: relative; z-index: 1; }
+.nd-page .top { width: 100%; }
+
+/* The room. Dark until the bulb comes on, then a warm wash spreads out from where the bulb hangs (--by, set by JS). */
+.nd-ambient {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+  background:
+    radial-gradient(ellipse min(1100px, 150vw) min(760px, 110vw) at 50% var(--by, 300px), rgba(255, 196, 122, .15), rgba(255, 170, 92, .055) 42%, rgba(255, 170, 92, 0) 72%),
+    radial-gradient(ellipse 60% 40% at 50% var(--by, 300px), rgba(255, 226, 180, .05), rgba(255, 226, 180, 0) 80%);
+  transition: opacity .6s var(--ease-out);
+}
+.nd-page.is-lit .nd-ambient { opacity: 1; transition: opacity 2.8s cubic-bezier(.3, .1, .3, 1); }
+
+/* One screen: the scene takes what the words leave. */
+.nd {
+  flex: 1 0 auto; display: flex; flex-direction: column; align-items: center;
+  width: 100%; max-width: calc(var(--max) + 2 * var(--gutter)); margin: 0 auto;
+  height: clamp(560px, calc(100svh - 76px), 1000px);
+  padding: 0 var(--gutter) clamp(20px, 4vh, 44px);
+}
+.nd-stage { position: relative; flex: 1 1 auto; width: 100%; min-height: 300px; }
+.nd-scene {
+  position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;
+  user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+}
+
+/* Words: both states share one cell, so the scene never jumps when the light comes on */
+.nd-panel { display: grid; flex: none; width: 100%; max-width: 540px; text-align: center; }
+.nd-panel > div { grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+.nd-panel > .is-off { visibility: hidden; }
+.nd-name { margin: 0; }
+.nd-play { justify-content: flex-start !important; }
+.nd-prompt { margin-top: 12px; font-size: clamp(24px, 2.5vw, 34px); font-weight: 700; line-height: 1.12; letter-spacing: -.03em; text-wrap: balance; }
+.nd-hint { margin: 10px auto 0; min-height: 1.6em; max-width: 34ch; }
+.nd-final { margin: 0; font-size: clamp(25px, 2.6vw, 36px); line-height: 1.1; letter-spacing: -.03em; text-wrap: balance; }
+.nd-final:focus { outline: none; }
+.nd-sub { margin-top: 10px; color: var(--soft); font-size: clamp(16px, 1.3vw, 18px); }
+.nd-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 22px; }
+.nd-actions .btn-quiet { border: 0; font-family: inherit; font-size: 16px; cursor: pointer; gap: 8px; }
+.nd-actions .btn-quiet svg { width: 18px; height: 18px; }
+.nd-more { margin-top: 14px; font-size: 15px; }
+.nd-more a, .nd-noscript a { color: var(--paper); text-decoration-color: rgba(241, 242, 239, .4); text-underline-offset: 3px; }
+.nd-more a:hover { text-decoration-color: var(--lime); }
+
+/* ---------------------------------------------------------------- scene */
+
+.nd-glass { fill: url(#ndGlassOff); stroke: rgba(241, 242, 239, .26); stroke-width: .9; }
+.nd-strands path { fill: none; stroke-width: 1.5; stroke-linecap: round; }
+.nd-logo-ghost { opacity: .016; }
+.nd-pool { opacity: 0; transition: opacity .6s var(--ease-out); }
+.nd-page.is-lit .nd-pool { opacity: 1; transition: opacity 2.4s cubic-bezier(.3, .1, .3, 1) .5s; }
+
+/* Only what can be touched right now takes touches; everywhere else the page scrolls as usual */
+.nd-hit { cursor: grab; pointer-events: none; touch-action: none; -webkit-touch-callout: none; outline: none; }
+.nd-hit.is-active { pointer-events: all; }
+.is-dragging .nd-hit { cursor: grabbing; }
+.nd-hit:focus-visible { stroke: var(--lime); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.nd-bulb-art { pointer-events: none; }
+
+/* Guides: a turning arrow around the bulb, a ring where the new bulb goes */
+.nd-arc, .nd-target { opacity: 0; transition: opacity .45s var(--ease-out); pointer-events: none; }
+.nd-arc.is-on { opacity: .55; }
+.nd-target.is-on { opacity: .8; }
+.nd-target.is-near { opacity: 1; }
+.nd-target ellipse { transition: stroke-width .2s var(--ease-out); }
+.nd-target.is-near ellipse { stroke-width: 2.4; }
+
+.nd-motes circle { fill: #FFE7BF; opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .nd-arc.is-on { animation: nd-breathe 2.6s ease-in-out infinite; }
+  .nd-target.is-on:not(.is-near) { animation: nd-breathe 1.8s ease-in-out infinite; }
+  .nd-play, .nd-done { transition: opacity .5s var(--ease-out), transform .7s var(--ease-out); }
+  .nd-panel > .is-off { opacity: 0; transform: translateY(8px); }
+  .nd-done:not(.is-off) .nd-sub { animation: nd-rise .8s var(--ease-out) .12s both; }
+  .nd-done:not(.is-off) .nd-actions { animation: nd-rise .8s var(--ease-out) .26s both; }
+  .nd-done:not(.is-off) .nd-more { animation: nd-rise .8s var(--ease-out) .4s both; }
+  .nd-hint.is-new { animation: nd-rise .4s var(--ease-out); }
+  /* dust in the beam: few, slow, only once the light is on */
+  .nd-page.is-lit .nd-motes circle { animation: nd-mote 9s ease-in-out infinite; }
+  .nd-page.is-lit .nd-motes circle:nth-child(2) { animation-duration: 11s; animation-delay: -3s; }
+  .nd-page.is-lit .nd-motes circle:nth-child(3) { animation-duration: 8s; animation-delay: -5s; }
+  .nd-page.is-lit .nd-motes circle:nth-child(4) { animation-duration: 13s; animation-delay: -1s; }
+  .nd-page.is-lit .nd-motes circle:nth-child(5) { animation-duration: 10s; animation-delay: -7s; }
+  .nd-page.is-lit .nd-motes circle:nth-child(6) { animation-duration: 12s; animation-delay: -4s; }
+  .nd-page.is-lit .nd-motes circle:nth-child(7) { animation-duration: 9.5s; animation-delay: -6s; }
+}
+@keyframes nd-breathe { 0%, 100% { opacity: .6; } 50% { opacity: .22; } }
+@keyframes nd-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes nd-mote {
+  0% { opacity: 0; transform: translate(0, 0); }
+  30% { opacity: .55; }
+  70% { opacity: .35; }
+  100% { opacity: 0; transform: translate(14px, -38px); }
+}
+
+/* Phones: the words sit snug under the scene, the buttons share the width */
+@media (max-width: 480px) {
+  .nd { height: clamp(540px, calc(100svh - 64px), 900px); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .nd-prompt { font-size: 23px; margin-top: 8px; }
+  .nd-hint { font-size: 15.5px; margin-top: 6px; }
+  .nd-final { font-size: 24px; }
+  .nd-sub { font-size: 16px; margin-top: 8px; }
+  .nd-actions { margin-top: 16px; gap: 8px; }
+  .nd-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 50px; }
+  .nd-more { margin-top: 10px; }
+}

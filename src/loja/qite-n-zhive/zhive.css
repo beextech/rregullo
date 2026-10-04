@@ -1,7 +1,12 @@
 /* Rregullo: "Qite n’zhivë!". Builds on site.css and loja.css (header, sound switch, layout, panel, buttons). */
 
 .zh-stage { aspect-ratio: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.zh-level { width: 100%; max-width: 560px; height: auto; aspect-ratio: 184 / 166; overflow: visible; user-select: none; -webkit-user-select: none; }
+.zh-level { width: 100%; max-width: 560px; height: auto; aspect-ratio: 184 / 166; overflow: hidden; user-select: none; -webkit-user-select: none; }
+/* the camera passes over the letters on its way into the O: feather the stage's sides so nothing is cut hard */
+.zh-level {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+          mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
 .zh-stage.is-draggable { cursor: grab; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .zh-stage.is-dragging { cursor: grabbing; }
 
@@ -9,6 +14,9 @@
 .zh-start { margin-top: 24px; }
 .zh .btn-quiet { border: 0; font-family: inherit; cursor: pointer; }
 .zh-meter { transition: opacity .2s var(--ease-out); }
+/* in the whole-logo view only the logo shows: no horizon, no meter */
+.zh-play-only { transition: opacity .4s var(--ease-out); }
+.zh-level.is-logo .zh-play-only, .zh-level.is-logo .zh-meter { opacity: 0; }
 .zh-meter.is-empty { opacity: 0; }
 .zh-done .done-actions { margin-top: 24px; }
 .zh-more { margin-top: 18px; font-size: 15px; }

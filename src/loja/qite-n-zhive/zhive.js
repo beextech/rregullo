@@ -1,6 +1,7 @@
 // "Qite n’zhivë!": the O in the Rregullo logo is a spirit level, and the bubble (the zhivë) is yours.
 // Tilt the phone (or drag, or use the arrow keys) to bring it between the two lines and hold it there.
 // The surface it sits on is a little crooked and wanders slowly, so the level needs a steady hand.
+// It opens on the whole logo; the camera moves into the O to play and pulls back out to the finished logo at the end.
 // One requestAnimationFrame loop; the bubble is a damped spring chasing where the tilt says it should be.
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -12,6 +13,9 @@ const HOLD = 2.7;       // seconds between the lines to finish
 const GAIN = 1.7;       // logo units per degree of tilt: the full travel is about 12°
 const PUSH = 30;        // logo units at the slider's end (touch and mouse)
 const SPRING = 60, DAMP = 13;   // slightly under critical damping: oil in a vial, it glides and settles
+// Camera: centre and width of the view in logo units. The height follows the stage's own aspect (184 / 166).
+const ASPECT = 166 / 184;
+const CAM = { logo: { x: 357, y: 51, w: 800 }, o: { x: 658, y: 57, w: 184 } };   // the logo keeps a margin for the edge fade
 
 const COPY = {
   tilt: 'Anoje telefonin majtas e djathtas për me e qitë n’vijë.',
@@ -21,7 +25,7 @@ const COPY = {
   close: 'Edhe pak…',
   hold: 'Mbaje aty…',
   denied: 'Sensori s’u lejua. S’ka gajle, luaje me gisht.',
-  noSensor: 'Ky telefon s’po e jep sensorin. Luaje me gisht.',
+  noSensor: 'Sensori s’po përgjigjet. S’ka gajle, luaje me gisht.',
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -68,15 +72,16 @@ const Sound = {
 
 /* ---------------------------------------------------------------- tilt sensor */
 
-// Left-right tilt of the screen in degrees, whichever way the phone is held. Right side down is positive.
+// How far the screen's left-right edge slopes, in degrees (right side down is positive): exactly what a spirit level
+// lying along the screen would read. It comes from gravity in the phone's own axes, so it holds whether the phone
+// lies flat or is held up in front of you, and in either landscape direction.
+const DEG = Math.PI / 180;
 function screenRoll(e) {
-  const angle = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
-  switch (((angle % 360) + 360) % 360) {
-    case 90: return -e.beta;
-    case 270: return e.beta;
-    case 180: return -e.gamma;
-    default: return e.gamma;
-  }
+  const b = e.beta * DEG, g = e.gamma * DEG;
+  const down = { x: Math.cos(b) * Math.sin(g), y: -Math.sin(b) };   // gravity along the device's x and y axes
+  const angle = screen.orientation?.angle ?? window.orientation ?? 0;
+  const along = { 0: down.x, 90: -down.y, 180: -down.x, 270: down.y }[((angle % 360) + 360) % 360] ?? down.x;
+  return Math.asin(clamp(along, -1, 1)) / DEG;
 }
 
 const Tilt = {
@@ -119,7 +124,7 @@ function mountGame() {
   const root = $('[data-zhive]');
   if (!root) return;
   const ui = {
-    bubble: $('[data-bubble]'), meter: $('[data-meter]'), stage: $('[data-stage]'),
+    level: $('[data-level]'), bubble: $('[data-bubble]'), meter: $('[data-meter]'), stage: $('[data-stage]'),
     control: $('[data-control]'), slider: $('[data-slider]'),
     start: $('[data-start]'), replay: $('[data-replay]'),
     introHint: $('[data-intro-hint]'), step: $('[data-step]'), hint: $('[data-hint]'),
@@ -139,6 +144,7 @@ function mountGame() {
     t: 0, hold: 0, zoneSaid: false,
     bias: 0, phase: [0, 0],  // the crooked, slowly wandering surface
     settle: null,
+    cam: { ...CAM.logo }, move: null,   // the camera now, and its move in progress
   };
 
   const showPanel = (name) => {
@@ -154,7 +160,12 @@ function mountGame() {
   const setHint = (text) => { if (ui.hint.textContent !== text) ui.hint.textContent = text; };
 
   const draw = () => {
-    ui.bubble.setAttribute('transform', `translate(${f(S.x)} 0)`);
+    // a moving bubble stretches a little along the vial, like a real one, and rounds up again when it stops
+    const s = Math.min(0.12, Math.abs(S.v) * 0.0015);
+    ui.bubble.setAttribute('transform', s < 0.005 ? `translate(${f(S.x)} 0)`
+      : `translate(${f(S.x + 658)} 50) scale(${f(1 + s)} ${f(1 - s * 0.6)}) translate(-658 -50)`);
+    const c = S.cam, h = c.w * ASPECT;
+    ui.level.setAttribute('viewBox', `${f(c.x - c.w / 2)} ${f(c.y - h / 2)} ${f(c.w)} ${f(h)}`);
     ui.meter.setAttribute('stroke-dasharray', `${f(S.hold / HOLD)} 1`);
     ui.meter.classList.toggle('is-empty', S.hold <= 0);
   };
@@ -170,11 +181,33 @@ function mountGame() {
     return LIMIT * Math.tanh(want / LIMIT);                                    // it slows as it meets the ring
   };
 
+  // Move the camera between the whole logo and the O. Resolves when it arrives.
+  const moveTo = (name) => new Promise((resolve) => {
+    const to = CAM[name];
+    ui.level.classList.toggle('is-logo', name === 'logo');
+    if (reduceMotion.matches) { S.cam = { ...to }; S.move = null; draw(); resolve(); return; }
+    S.move = { from: { ...S.cam }, to, t: 0, dur: name === 'o' ? 0.9 : 1.1, resolve };
+    run();
+  });
+  const stepCamera = (dt) => {
+    const m = S.move;
+    m.t = Math.min(1, m.t + dt / m.dur);
+    const e = m.t < 0.5 ? 4 * m.t ** 3 : 1 - Math.pow(-2 * m.t + 2, 3) / 2;
+    // zoom in log space so the push-in feels even; the centre follows the same curve
+    S.cam = {
+      x: m.from.x + (m.to.x - m.from.x) * e,
+      y: m.from.y + (m.to.y - m.from.y) * e,
+      w: Math.exp(Math.log(m.from.w) + (Math.log(m.to.w) - Math.log(m.from.w)) * e),
+    };
+    if (m.t >= 1) { S.move = null; m.resolve(); }
+  };
+
   let raf = 0, last = 0;
   const frame = (now) => {
     raf = 0;
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
+    if (S.move) stepCamera(dt);
 
     if (S.state === 'play') {
       S.t += dt;
@@ -194,16 +227,17 @@ function mountGame() {
       if (!inZone && Math.abs(S.x) > ZONE * 2) S.zoneSaid = false;
       if (S.note && S.t > 4) S.note = '';
       if (S.hold >= HOLD) finish();
-    } else if (S.state === 'settle') {
+    } else if (S.state === 'settle' && S.settle) {
       // the level comes true: the bubble glides to dead centre (ident easing)
       const s = S.settle;
       s.t = Math.min(1, s.t + dt / s.dur);
       const e = 1 - Math.pow(1 - s.t, 3);
       S.x = s.from * (1 - e);
-      if (s.t >= 1) done();
+      S.v = 0;
+      if (s.t >= 1) { S.settle = null; done(); }
     }
     draw();
-    if ((S.state === 'play' || S.state === 'settle') && !document.hidden) raf = requestAnimationFrame(frame);
+    if ((S.state === 'play' || S.settle || S.move) && !document.hidden) raf = requestAnimationFrame(frame);
   };
   const run = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
 
@@ -241,30 +275,41 @@ function mountGame() {
     S.x = 0; S.hold = HOLD;
     if (S.mode === 'tilt') Tilt.stop();
     ui.stage.classList.remove('is-draggable');
+    ui.control.hidden = true;
     showPanel('done');
     ui.doneHead.focus({ preventScroll: true });
     say('Shumë mirë! E qite n’vijë! Për këtë punë je mjeshtër.');
+    moveTo('logo');   // back out to the logo, now with its zhivë n’vijë
   }
 
   // Start: only now ask for the sensor (iOS shows its prompt here), then fall back to touch if it says no.
   ui.start.addEventListener('click', async () => {
     if (S.state !== 'intro') return;
     S.state = 'asking';
-    if (!sensorLikely) { begin(touchy ? 'touch' : 'mouse'); return; }
-    let permission = 'granted';
+    ui.start.disabled = true;
+    if (!sensorLikely) { await moveTo('o'); begin(touchy ? 'touch' : 'mouse'); return; }
+    // The permission call must be the first thing after the tap (iOS); the camera moves in meanwhile.
     const DOE = window.DeviceOrientationEvent;
-    if (DOE && typeof DOE.requestPermission === 'function') {
-      try { permission = await DOE.requestPermission(); } catch { permission = 'denied'; }
-    }
-    if (permission === 'granted' && await Tilt.listen()) { S.note = ''; begin('tilt'); return; }
+    const asking = DOE && typeof DOE.requestPermission === 'function'
+      ? DOE.requestPermission().catch(() => 'denied') : Promise.resolve('granted');
+    const zoom = moveTo('o');
+    const permission = await asking;
+    const ok = permission === 'granted' && await Tilt.listen();
+    await zoom;
+    if (ok) { S.note = ''; begin('tilt'); return; }
     Tilt.stop();
     S.note = permission === 'granted' ? COPY.noSensor : COPY.denied;
     begin('touch');
   });
 
   ui.replay.addEventListener('click', async () => {
+    if (S.state !== 'done') return;
+    S.state = 'asking';
     S.note = '';
+    S.x = -13; S.v = 0;
+    const zoom = moveTo('o');
     if (S.mode === 'tilt' && !(await Tilt.listen())) { Tilt.stop(); S.mode = 'touch'; S.note = COPY.noSensor; }
+    await zoom;
     begin(S.mode);
   });
 
@@ -316,7 +361,9 @@ function mountGame() {
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
   // Turning the phone mid-game changes which axis is "left-right": start the level again from there.
-  screen.orientation?.addEventListener?.('change', () => { if (S.mode === 'tilt' && S.state === 'play') Tilt.recalibrate(); });
+  const turned = () => { if (S.mode === 'tilt' && S.state === 'play') Tilt.recalibrate(); };
+  if (screen.orientation?.addEventListener) screen.orientation.addEventListener('change', turned);
+  else addEventListener('orientationchange', turned);
   addEventListener('pagehide', () => Tilt.stop());
 
   showPanel('intro');

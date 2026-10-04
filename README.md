@@ -288,7 +288,7 @@ site.config.json     domain, contact email, social links (public, non-secret)
 | --- | --- | --- |
 | `/loja/` | `src/loja/index.html`, `catalog.css` | Catalog: one card per game |
 | `/loja/ceshme-t-piki/` | `src/loja/ceshme-t-piki/index.html` + `src/loja/loja.js`, `loja.css` | Çeshme t’piki: close the tap, tighten the nut |
-| `/loja/qite-n-zhive/` | `src/loja/qite-n-zhive/` | Qite n’zhivë!: a small construction spirit level sits crooked; level it so the bubble (drawn like the logo’s zhivë) lands between the two lines. It locks with a click and haptic, and the logo shows as the reward. Phones tilt (permission asked only after "Fillo", slope read from gravity along the screen, calibrated at start); grab-and-turn drag and ← → keys work everywhere |
+| `/loja/qite-n-zhive/` | `src/loja/qite-n-zhive/` | Qite n’zhivë!: opens on the whole logo, moves into the O (a spirit level, libelë) to play, and pulls back out to the finished logo on success. Bring the bubble (the zhivë) between the two lines and hold it ~2.7 s. Tilt on phones (the sensor permission is asked only after "Fillo"; the slope is read from gravity along the screen, calibrated from the starting position), slider/drag/arrow keys otherwise |
 
 Shared sound effects (opt-in) live in `src/loja/sfx/`. The homepage teasers below the signup link straight to each game (`src/teaser.css`, `src/teaser.js`).
 

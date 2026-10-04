@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Qite n’zhivë! | Rregullo</title>
-<meta name="description" content="Një lojë e shkurtër nga Rregullo: a po din me e qitë libelën n’nivel?">
+<meta name="description" content="Një lojë e shkurtër nga Rregullo: O-ja e logos është libelë. Anoje telefonin e qite zhivën n’vijë.">
 <meta name="robots" content="noindex">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="sq_XK">
 <meta property="og:site_name" content="Rregullo">
 <meta property="og:url" content="{{ASSET_BASE}}/loja/qite-n-zhive/">
 <meta property="og:title" content="Qite n’zhivë! | Rregullo">
-<meta property="og:description" content="Një lojë e shkurtër nga Rregullo: a po din me e qitë libelën n’nivel?">
+<meta property="og:description" content="Një lojë e shkurtër nga Rregullo: O-ja e logos është libelë. Anoje telefonin e qite zhivën n’vijë.">
 <meta property="og:image" content="{{ASSET_BASE}}/media/og-image.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta property="og:image:alt" content="Logoja e Rregullo në sfond të errët">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Qite n’zhivë! | Rregullo">
-<meta name="twitter:description" content="Një lojë e shkurtër nga Rregullo: a po din me e qitë libelën n’nivel?">
+<meta name="twitter:description" content="Një lojë e shkurtër nga Rregullo: O-ja e logos është libelë. Anoje telefonin e qite zhivën n’vijë.">
 <meta name="twitter:image" content="{{ASSET_BASE}}/media/og-image.png">
 <meta name="theme-color" content="#16171A">
 <meta name="color-scheme" content="dark">
@@ -53,16 +53,16 @@
     <p class="visually-hidden" aria-live="polite" data-announce></p>
     <div class="loja-panel">
       <div class="zh-intro" data-panel="intro">
-        <p class="step">A po din me e qellu?</p>
+        <p class="zh-lead">O-ja e Rregullos është libelë. Zhiva brenda saj tregon kur gjithçka është n’vijë.</p>
         <p class="hint" data-intro-hint>Anoje telefonin majtas e djathtas për me e qitë n’vijë.</p>
         <button class="btn btn-primary zh-start" type="button" data-start>Fillo</button>
       </div>
       <div class="zh-play is-off" data-panel="play" aria-hidden="true" inert>
         <p class="step" data-step>Anoje telefonin majtas e djathtas për me e qitë n’vijë.</p>
-        <p class="hint" data-hint>Qite zhivën mes dy vijave.</p>
+        <p class="hint" data-hint>Qite zhivën mes dy vijave dhe mbaje aty.</p>
       </div>
       <div class="zh-done is-off" data-panel="done" aria-hidden="true" inert>
-        <p class="done-head" tabindex="-1" data-done-head>Në nivel. <span aria-hidden="true">👌</span></p>
+        <p class="done-head" tabindex="-1" data-done-head>Shumë mirë! E qite n’vijë!</p>
         <p class="done-sub">Për këtë punë je mjeshtër.</p>
         <div class="done-actions">
           <a class="btn btn-primary" href="/#lajmerimi">Gjeje mjeshtrin te Rregullo</a>
@@ -74,61 +74,36 @@
   </div>
 
   <div class="loja-stage zh-stage" data-stage>
-    <!-- A small construction spirit level (libelë): anodised body, milled faces, rubber caps, a polymer collar round the
-         vial. The vial, its two lines and the bubble (the zhivë) are drawn exactly like the O in the Rregullo logo. -->
-    <svg class="zh-scene" viewBox="0 0 360 210" role="slider" tabindex="0" aria-label="Libela. Rrotulloje që zhiva të bjerë mes dy vijave."
-         aria-valuemin="-15" aria-valuemax="15" aria-valuenow="0" aria-valuetext="Libela është e anuar" data-scene>
+    <!-- The Rregullo logo (identity 2.4, 01-logo), unchanged. The game starts on the whole logo, the camera moves
+         into the O to play, and pulls back out to the finished logo when the zhivë is n’vijë. Only the bubble moves. -->
+    <svg class="zh-level is-logo" viewBox="0 -62 714 226" role="img" aria-label="Logoja e Rregullos. O-ja është libelë dhe zhiva lëviz majtas e djathtas." data-level>
       <defs>
-        <filter id="zhShadow" x="-20%" y="-300%" width="140%" height="700%"><feGaussianBlur stdDeviation="5"/></filter>
-        <clipPath id="zhVial"><rect x="-60" y="-12" width="120" height="24" rx="12"/></clipPath>
+        <linearGradient id="zhHorizon" x1="0" x2="1">
+          <stop offset="0" stop-color="#F1F2EF" stop-opacity="0"/>
+          <stop offset=".5" stop-color="#F1F2EF" stop-opacity=".16"/>
+          <stop offset="1" stop-color="#F1F2EF" stop-opacity="0"/>
+        </linearGradient>
       </defs>
-      <ellipse class="zh-shadow" cx="180" cy="112" rx="150" ry="5" fill="#000" filter="url(#zhShadow)" data-shadow/>
-      <g class="zh-level" transform="translate(180 80) rotate(5)" data-level>
-        <g class="zh-tool" data-tool>
-          <!-- rubber end caps -->
-          <rect x="-168" y="-25" width="26" height="50" rx="8" fill="#383B40"/>
-          <rect x="142" y="-25" width="26" height="50" rx="8" fill="#383B40"/>
-          <path d="M-163 -20V20M163 -20V20" stroke="#F1F2EF" stroke-opacity=".06" stroke-width="2" stroke-linecap="round"/>
-          <!-- anodised body with milled measuring faces top and bottom, and the shallow channel between two rails -->
-          <rect x="-146" y="-22" width="292" height="44" fill="#2B5058"/>
-          <rect x="-146" y="-22" width="292" height="4" fill="#9DA2A7"/>
-          <rect x="-146" y="18" width="292" height="4" fill="#7E8389"/>
-          <path d="M-146 -21.5H146" stroke="#ECEEEB" stroke-opacity=".55"/>
-          <path d="M-146 -9H146M-146 9H146" stroke="#22434A" stroke-width="1.2"/>
-          <path d="M-146 -8H146" stroke="#F1F2EF" stroke-opacity=".05"/>
-          <!-- millimetre ticks on the top face, a quiet nod to a real tool -->
-          <path d="M-130 -18v3M-110 -18v3M-90 -18v3M90 -18v3M110 -18v3M130 -18v3" stroke="#2B5058" stroke-opacity=".7"/>
-          <!-- the vial collar and the vial -->
-          <rect x="-72" y="-19" width="144" height="38" rx="19" fill="#E7E8E3"/>
-          <rect x="-72" y="-19" width="144" height="38" rx="19" fill="none" stroke="#16171A" stroke-opacity=".18"/>
-          <rect x="-60" y="-12" width="120" height="24" rx="12" fill="#ABE23F"/>
-          <g clip-path="url(#zhVial)">
-            <rect x="-60" y="4" width="120" height="8" fill="#4A7A14" fill-opacity=".22"/>
-            <path d="M-50 -9.5H50" stroke="#F1F2EF" stroke-opacity=".45" stroke-width="1.2" stroke-linecap="round"/>
-            <rect x="-25" y="-12" width="4" height="24" fill="#16171A" data-mark/>
-            <rect x="21" y="-12" width="4" height="24" fill="#16171A" data-mark/>
-            <g data-bubble>
-              <path fill="#16171A" d="M-7 -7.5H7A7.5 7.5 0 0 1 7 7.5H-7A7.5 7.5 0 0 1 -7 -7.5Z"/>
-              <path fill="#F1F2EF" d="M-7 -4.5H7A4.5 4.5 0 0 1 7 4.5H-7A4.5 4.5 0 0 1 -7 -4.5Z"/>
-            </g>
-          </g>
-          <rect x="-60" y="-12" width="120" height="24" rx="12" fill="none" stroke="#4A7A14" stroke-width="1.4"/>
-          <rect class="zh-glow" x="-63" y="-15" width="126" height="30" rx="15" fill="none" stroke="#ABE23F" stroke-width="2" data-glow/>
-        </g>
+      <path class="zh-play-only" d="M566 50H750" stroke="url(#zhHorizon)" stroke-width=".5"/>
+      <g class="zh-word"><path fill="#F1F2EF" d="M0 0H20V100H0ZM0 56A56 56 0 0 1 56 0L56 20C32.52 20 20 32.52 20 56ZM56 0H59V20H56ZM74 0H94V100H74ZM74 56A56 56 0 0 1 130 0L130 20C106.52 20 94 32.52 94 56ZM130 0H133V20H130ZM157 40H240V60H157ZM240 50H250V60H240ZM245.06 72A51.5 51.5 0 1 1 250 50L230 50A31.5 31.5 0 1 0 221.04 72ZM264 50A51.5 51.5 0 1 1 367 50A51.5 51.5 0 1 1 264 50ZM315.5 18.5C298.1 18.5 284 32.6 284 50C284 67.4 298.1 81.5 315.5 81.5C336.04 81.5 347 70.54 347 50C347 29.46 336.04 18.5 315.5 18.5ZM347 0H367V112H347ZM367 112A51.5 51.5 0 0 1 268.94 134L292.96 134A31.5 31.5 0 0 0 347 112ZM391 0H411V50H391ZM494 50A51.5 51.5 0 0 1 391 50L411 50C411 67.4 425.1 81.5 442.5 81.5C463.04 81.5 474 70.54 474 50ZM474 0H494V100H474ZM518 -62H538V100H518ZM562 -62H582V100H562Z"/></g>
+      <path fill="#ABE23F" d="M658 14.5H658C678.99 14.5 696 30.39 696 50C696 69.61 678.99 85.5 658 85.5H658C637.01 85.5 620 69.61 620 50C620 30.39 637.01 14.5 658 14.5Z"/>
+      <path fill="#16171A" d="M633 20.23H637V79.77H633Z"/>
+      <path fill="#16171A" d="M679 20.23H683V79.77H679Z"/>
+      <path fill="#F1F2EF" fill-rule="evenodd" d="M658 -1.5H658C688.93 -1.5 714 21.56 714 50C714 78.44 688.93 101.5 658 101.5H658C627.07 101.5 602 78.44 602 50C602 21.56 627.07 -1.5 658 -1.5ZM658 16.5H658C677.88 16.5 694 31.5 694 50C694 68.5 677.88 83.5 658 83.5H658C638.12 83.5 622 68.5 622 50C622 31.5 638.12 16.5 658 16.5Z"/>
+      <g data-bubble transform="translate(-13 0)">
+        <path fill="#16171A" d="M651 42.5H665A7.5 7.5 0 0 1 665 57.5H651A7.5 7.5 0 0 1 651 42.5Z"/>
+        <path fill="#F1F2EF" d="M651 45.5H665A4.5 4.5 0 0 1 665 54.5H651A4.5 4.5 0 0 1 651 45.5Z"/>
       </g>
-      <!-- the reward: the logo, whose O is this same vial and bubble -->
-      <g class="zh-brand" transform="translate(101.5 168) scale(.22)" data-brand aria-hidden="true">
-        <path fill="#F1F2EF" d="M0 0H20V100H0ZM0 56A56 56 0 0 1 56 0L56 20C32.52 20 20 32.52 20 56ZM56 0H59V20H56ZM74 0H94V100H74ZM74 56A56 56 0 0 1 130 0L130 20C106.52 20 94 32.52 94 56ZM130 0H133V20H130ZM157 40H240V60H157ZM240 50H250V60H240ZM245.06 72A51.5 51.5 0 1 1 250 50L230 50A31.5 31.5 0 1 0 221.04 72ZM264 50A51.5 51.5 0 1 1 367 50A51.5 51.5 0 1 1 264 50ZM315.5 18.5C298.1 18.5 284 32.6 284 50C284 67.4 298.1 81.5 315.5 81.5C336.04 81.5 347 70.54 347 50C347 29.46 336.04 18.5 315.5 18.5ZM347 0H367V112H347ZM367 112A51.5 51.5 0 0 1 268.94 134L292.96 134A31.5 31.5 0 0 0 347 112ZM391 0H411V50H391ZM494 50A51.5 51.5 0 0 1 391 50L411 50C411 67.4 425.1 81.5 442.5 81.5C463.04 81.5 474 70.54 474 50ZM474 0H494V100H474ZM518 -62H538V100H518ZM562 -62H582V100H562Z"/>
-        <path fill="#ABE23F" d="M658 14.5H658C678.99 14.5 696 30.39 696 50C696 69.61 678.99 85.5 658 85.5H658C637.01 85.5 620 69.61 620 50C620 30.39 637.01 14.5 658 14.5Z"/>
-        <path fill="#16171A" d="M633 20.23H637V79.77H633Z"/>
-        <path fill="#16171A" d="M679 20.23H683V79.77H679Z"/>
-        <path fill="#F1F2EF" fill-rule="evenodd" d="M658 -1.5H658C688.93 -1.5 714 21.56 714 50C714 78.44 688.93 101.5 658 101.5H658C627.07 101.5 602 78.44 602 50C602 21.56 627.07 -1.5 658 -1.5ZM658 16.5H658C677.88 16.5 694 31.5 694 50C694 68.5 677.88 83.5 658 83.5H658C638.12 83.5 622 68.5 622 50C622 31.5 638.12 16.5 658 16.5Z"/>
-        <g class="zh-brand-bubble">
-          <path fill="#16171A" d="M651 42.5H665A7.5 7.5 0 0 1 665 57.5H651A7.5 7.5 0 0 1 651 42.5Z"/>
-          <path fill="#F1F2EF" d="M651 45.5H665A4.5 4.5 0 0 1 665 54.5H651A4.5 4.5 0 0 1 651 45.5Z"/>
-        </g>
-      </g>
+      <!-- hold meter: fills while the bubble stays between the lines -->
+      <path class="zh-play-only" d="M628 122H688" stroke="#F1F2EF" stroke-opacity=".16" stroke-width="1.5" stroke-linecap="round"/>
+      <path class="zh-meter is-empty" d="M628 122H688" stroke="#ABE23F" stroke-width="1.5" stroke-linecap="round" pathLength="1" stroke-dasharray="0 1" data-meter/>
     </svg>
+
+    <div class="zh-control" data-control hidden>
+      <label class="visually-hidden" for="zh-tilt">Anoja e libelës</label>
+      <input class="zh-slider" id="zh-tilt" type="range" min="-100" max="100" step="1" value="0" data-slider>
+      <div class="zh-ends" aria-hidden="true"><span>Majtas</span><span>Djathtas</span></div>
+    </div>
   </div>
 </main>
 

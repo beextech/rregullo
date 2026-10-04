@@ -280,6 +280,20 @@ wrangler.toml        Worker + static assets + D1 + non-secret vars
 site.config.json     domain, contact email, social links (public, non-secret)
 ```
 
+## Games (/loja)
+
+`/loja/` is the catalog of short Rregullo games; each game has its own route. All are `noindex` and stay out of the sitemap.
+
+| Route | Source | What it is |
+| --- | --- | --- |
+| `/loja/` | `src/loja/index.html`, `catalog.css` | Catalog: one card per game |
+| `/loja/ceshme-t-piki/` | `src/loja/ceshme-t-piki/index.html` + `src/loja/loja.js`, `loja.css` | Çeshme t’piki: close the tap, tighten the nut |
+| `/loja/qite-n-zhive/` | `src/loja/qite-n-zhive/` | Qite n’zhivë!: opens on the whole logo, moves into the O (a spirit level, libelë) to play, and pulls back out to the finished logo on success. Bring the bubble (the zhivë) between the two lines and hold it ~2.7 s. Tilt on phones (the sensor permission is asked only after "Fillo"; the slope is read from gravity along the screen, calibrated from the starting position), slider/drag/arrow keys otherwise |
+
+Shared sound effects (opt-in) live in `src/loja/sfx/`. The homepage teasers below the signup link straight to each game (`src/teaser.css`, `src/teaser.js`).
+
+To add a game: create `src/loja/<slug>/index.html` (copy the head, header and sprite from an existing game), add one `<li class="game">` card to `src/loja/index.html`, and optionally a teaser row on the homepage. The build picks up every `index.html` under `src/loja/` for the stylesheet hash and the missing-file checks.
+
 ## Before launch, please also
 
 - **Native speaker check:** have someone from Kosovo read all the new copy:

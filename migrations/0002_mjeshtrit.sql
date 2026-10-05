@@ -1,4 +1,4 @@
--- The Rregullo app: mjeshtër profiles, their sign-in (SMS codes and sessions) and the team's sign-in (email links).
+-- The Rregullo app, step 1: mjeshtër accounts and their sign-in by SMS code.
 -- Clients have no account and nothing about them is stored here. Times are Unix epoch milliseconds.
 
 CREATE TABLE pros (
@@ -25,24 +25,14 @@ CREATE TABLE pros (
 );
 CREATE INDEX pros_status ON pros (status, submitted_at);
 
--- Per-day counters the public directory will fill (profile views and taps on call, WhatsApp, Viber).
-CREATE TABLE pro_stats_daily (
-  pro_id    TEXT NOT NULL,
-  day       TEXT NOT NULL,                            -- YYYY-MM-DD (UTC)
-  views     INTEGER NOT NULL DEFAULT 0,
-  calls     INTEGER NOT NULL DEFAULT 0,
-  whatsapp  INTEGER NOT NULL DEFAULT 0,
-  viber     INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (pro_id, day)
-);
-
--- One pending sign-in code per phone. Only a keyed hash of the code is stored; it lives 10 minutes.
+-- One sign-in code per phone at a time. Only a keyed hash of the code is stored; it lives 10 minutes.
+-- The row also carries the per-number send counters that cap SMS spend.
 CREATE TABLE sms_codes (
   phone          TEXT PRIMARY KEY,
-  code_hash      TEXT,
+  code_hash      TEXT,                                -- NULL once used, expired or guessed wrong too often
   expires_at     INTEGER,
   attempts       INTEGER NOT NULL DEFAULT 0,          -- wrong guesses on the current code
-  sent_count     INTEGER NOT NULL DEFAULT 0,          -- codes sent in the current 24 h window (SMS cost cap)
+  sent_count     INTEGER NOT NULL DEFAULT 0,          -- codes sent in the current 24 h window
   window_start   INTEGER NOT NULL,
   last_sent_at   INTEGER NOT NULL
 );
@@ -51,16 +41,9 @@ CREATE TABLE sms_codes (
 CREATE TABLE sessions (
   token_hash   TEXT PRIMARY KEY,
   kind         TEXT NOT NULL CHECK (kind IN ('pro', 'admin')),
-  subject      TEXT NOT NULL,                         -- pros.id, or the admin's email address
+  subject      TEXT NOT NULL,                         -- pros.id (or, from step 3, the admin's email address)
   created_at   INTEGER NOT NULL,
   expires_at   INTEGER NOT NULL
 );
 CREATE INDEX sessions_subject ON sessions (kind, subject);
 CREATE INDEX sessions_expires ON sessions (expires_at);
-
--- Email sign-in links for the team (addresses listed in the ADMIN_EMAILS secret). Single use, 15 minutes.
-CREATE TABLE admin_links (
-  token_hash  TEXT PRIMARY KEY,
-  email       TEXT NOT NULL,
-  expires_at  INTEGER NOT NULL
-);

@@ -1,14 +1,19 @@
 // Cloudflare Worker entry. Static files in dist/ are served by Workers static assets (the ASSETS binding);
-// the three dynamic routes reuse the handlers in functions/, which keep the Pages Functions signature.
+// the dynamic routes reuse the handlers in functions/, which keep the Pages Functions signature.
 
 import * as subscribe from '../functions/api/subscribe.js';
 import * as konfirmo from '../functions/konfirmo.js';
 import * as cregjistrohu from '../functions/cregjistrohu.js';
+import { dil, hyr, kodi, une } from '../functions/api/mjeshtri.js';
 
 const ROUTES = {
   '/api/subscribe': subscribe,
   '/konfirmo': konfirmo,
   '/cregjistrohu': cregjistrohu,
+  '/api/mjeshtri/kodi': kodi,
+  '/api/mjeshtri/hyr': hyr,
+  '/api/mjeshtri/une': une,
+  '/api/mjeshtri/dil': dil,
 };
 
 function handlerFor(mod, method) {

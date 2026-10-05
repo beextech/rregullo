@@ -65,13 +65,16 @@ export function missingConfig(cfg) {
 
 /**
  * Kosovo mobile numbers only (+383 43–49, then 6 digits), in E.164. Accepts the ways people write them:
- * 044 123 456, 044-123-456, +383 44 123 456, 00383 44 123 456, 38344123456. Returns '' when it is not one.
+ * 044 123 456, 44 123 456, 044-123-456, +383 44 123 456, +383 (0)44 123 456, 00383 44 123 456, 38344123456.
+ * Returns '' when it is not one.
  */
 export function normalisePhone(raw) {
   let s = String(raw || '').replace(/[\s\-().\/]/g, '');
   if (s.startsWith('00')) s = `+${s.slice(2)}`;
   else if (/^0\d{8}$/.test(s)) s = `+383${s.slice(1)}`;
-  else if (/^383\d{8}$/.test(s)) s = `+${s}`;
+  else if (/^4\d{7}$/.test(s)) s = `+383${s}`;                  // 44 123 456, without the leading 0
+  else if (/^383\d{8,9}$/.test(s)) s = `+${s}`;
+  if (/^\+3830\d{8}$/.test(s)) s = `+383${s.slice(5)}`;          // +383 (0)44 123 456
   return /^\+3834[3-9]\d{6}$/.test(s) ? s : '';
 }
 

@@ -47,3 +47,9 @@ database_name = "rregullo-launch"
 # rregullo-launch (weur). `npm run deploy:auto` keeps this in sync.
 database_id = "ba8344e4-92f6-4d54-b9cd-e39c6e847caf"
 migrations_dir = "migrations"
+
+# Worker Previews: Cloudflare's builds for branches other than main run `npx wrangler preview`, which needs this
+# block. Previews don't inherit the settings above, and this block deliberately gives them no database, variables
+# or secrets: a preview shows the pages, while the signup and the mjeshtër sign-in answer with an error there
+# instead of touching the real list. With `preview_urls = false` above, previews get no public URL either.
+[previews]

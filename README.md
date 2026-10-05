@@ -116,6 +116,8 @@ To deploy from your computer by hand: `npx wrangler login`, then steps 2 and 4 b
    - **Deploy command:** `npx wrangler deploy`
    - **Build variable:** `NODE_VERSION` = `20`
 
+   Builds of other branches (pull requests) run `npx wrangler preview`. The `[previews]` block in `wrangler.toml` gives those previews no database, variables or secrets, so a preview can never touch the real list; signup and sign-in answer with an error there. Previews also get no public URL while `preview_urls = false`.
+
 The domain is connected through `routes` in `wrangler.toml`: `rregullo.net` and `www.rregullo.net` are Worker custom domains, so each deploy creates their DNS records and HTTPS certificates. The DNS zone is on Cloudflare (nameservers set at Namecheap). If a deploy fails with *"Hostname … already has externally managed DNS records"*, delete the A, AAAA and CNAME records for `@` and `www` under **rregullo.net > DNS > Records** (keep the MX and TXT email-forwarding records) and deploy again. `SITE_URL` is `https://rregullo.net`; note that `npm run deploy:auto` rewrites it to the workers.dev address.
 
 ### 2. Database (D1)
@@ -331,3 +333,5 @@ Tables (`migrations/0002_mjeshtrit.sql`): `pros` (one row per mjeshtër, created
   - the launch email, which I wrote and which wasn't in the brief
 - **Legal review:** have the privacy notice reviewed. It describes this implementation accurately, but it doesn't claim compliance with any specific law, and it mentions Kosovo's Agency for Information and Privacy only as the place to complain.
 - **Contact email:** set `CONTACT_EMAIL`.
+- **Privacy notice for mjeshtër:** before the SMS secrets are set, add to `src/privatesia.html` what the mjeshtër sign-in stores (the phone number, a hash of each code and session, sign-in times) and that numbers go to the SMS provider. It currently describes only the launch list.
+- **Native speaker check for `/mjeshtri`:** the sign-in page, its error messages and the SMS text.

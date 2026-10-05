@@ -98,11 +98,11 @@ async function main() {
 
     console.log('Asking for a code');
     await check('2. phone numbers: Kosovo mobiles in any common form accepted, anything else refused', async () => {
-      for (const phone of ['', '12345', '+386 41 123 456', '044 12 34', '+383 38 123 456', '044 123 4567', 'abc']) {
+      for (const phone of ['', '12345', '+386 41 123 456', '044 12 34', '+383 38 123 456', '044 123 4567', '42 123 456', '+383 (0)38 123 456', 'abc']) {
         const r = await askCode(phone);
         assert(r.status === 400 && r.data.field === 'phone', `${JSON.stringify(phone)} → ${r.status}`);
       }
-      for (const [phone, shown] of [['044 123 456', '+383 44 123 456'], ['+383 49-555-111', '+383 49 555 111'], ['0038345222333', '+383 45 222 333'], ['(043) 777 888', '+383 43 777 888']]) {
+      for (const [phone, shown] of [['044 123 456', '+383 44 123 456'], ['+383 49-555-111', '+383 49 555 111'], ['0038345222333', '+383 45 222 333'], ['(043) 777 888', '+383 43 777 888'], ['46 333 444', '+383 46 333 444'], ['+383 (0)48 123 999', '+383 48 123 999']]) {
         const r = await askCode(phone);
         assert(r.status === 200 && r.data.phone === shown, `${phone} → ${r.status} ${JSON.stringify(r.data)}`);
       }

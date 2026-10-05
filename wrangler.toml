@@ -25,7 +25,7 @@ run_worker_first = ["/api/*", "/konfirmo", "/konfirmo/", "/cregjistrohu", "/creg
 [observability]
 enabled = true
 
-# Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL) are set with
+# Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL, and the SMS/Turnstile ones) are set with
 # `wrangler secret put` or in the dashboard, never here.
 [vars]
 # The public address every email link points at. `npm run deploy:auto` sets it to the workers.dev URL.
@@ -36,6 +36,10 @@ EMAIL_FROM = "Rregullo <onboarding@resend.dev>"
 # 'all': the team hears about every signup request and every confirmation. 'confirmed': confirmations only.
 # The recipient (LAUNCH_NOTIFICATION_EMAIL) is set as a secret, not here, so it never lands in Git.
 LAUNCH_NOTIFY_ON = "all"
+# The sender name on mjeshtër sign-in SMS (an alphanumeric sender ID registered with Twilio, a Twilio number, or a
+# Messaging Service SID starting with MG). Secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TURNSTILE_SECRET_KEY are
+# set with `wrangler secret put`.
+SMS_FROM = "Rregullo"
 
 [[d1_databases]]
 binding = "DB"

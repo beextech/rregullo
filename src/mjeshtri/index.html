@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paneli i mjeshtrit | Rregullo</title>
+<meta name="description" content="Hyr në panelin tënd të Rregullos me numrin e telefonit. Të dërgojmë një kod me SMS.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16171A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/mjeshtri/mjeshtri.css?v={{APP_CSS_HASH}}">
+<script type="module" src="/mjeshtri/mjeshtri.js?v={{APP_JS_HASH}}"></script>
+<!-- @if turnstile -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<!-- @endif -->
+</head>
+<body class="pro-page">
+<a class="skip" href="#main">Kalo te përmbajtja</a>
+
+<header class="top">
+  <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
+    <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
+  </a>
+  <span class="status">Për mjeshtër</span>
+</header>
+
+<main id="main" class="pro-shell">
+  <p class="pro-loading" data-view="loading">Po hapet…</p>
+
+  <!-- Step 1: the phone number -->
+  <section class="pro-card" data-view="phone" hidden aria-labelledby="phone-title">
+    <p class="eyebrow">Paneli i mjeshtrit</p>
+    <h1 class="pro-title" id="phone-title" tabindex="-1">Hyr me numrin e telefonit</h1>
+    <p class="pro-text">Të dërgojmë një kod me SMS. S’ka fjalëkalim për me mbajtë mend, dhe mbetesh i kyçur 90 ditë në këtë telefon.</p>
+    <form class="pro-form" id="phone-form" novalidate>
+      <label class="pro-label" for="phone">Numri i telefonit</label>
+      <input class="field-input" id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+        placeholder="044 123 456" maxlength="20" required aria-describedby="phone-hint phone-error">
+      <p class="pro-hint" id="phone-hint">Vetëm numra mobil të Kosovës (+383).</p>
+      <p class="field-error" id="phone-error" hidden></p>
+      <!-- @if turnstile -->
+      <div class="pro-human cf-turnstile" data-sitekey="{{TURNSTILE_SITE_KEY}}" data-theme="dark" data-size="flexible"></div>
+      <!-- @endif -->
+      <p class="form-error" id="phone-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Më dërgo kodin</span>
+      </button>
+    </form>
+  </section>
+
+  <!-- Step 2: the code from the SMS -->
+  <section class="pro-card" data-view="code" hidden aria-labelledby="code-title">
+    <p class="eyebrow">Paneli i mjeshtrit</p>
+    <h1 class="pro-title" id="code-title" tabindex="-1">Shkruaje kodin</h1>
+    <p class="pro-text">Ta dërguam një kod me 6 shifra në <strong id="code-phone"></strong>. Vlen 10 minuta.</p>
+    <p class="pro-dev" id="dev-code" hidden></p>
+    <form class="pro-form" id="code-form" novalidate>
+      <label class="pro-label" for="code">Kodi nga SMS-i</label>
+      <input class="field-input pro-code" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+        pattern="[0-9]*" maxlength="6" placeholder="••••••" required aria-describedby="code-error">
+      <p class="field-error" id="code-error" hidden></p>
+      <p class="form-error" id="code-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Hyr</span>
+      </button>
+    </form>
+    <p class="pro-links">
+      <button class="pro-link" type="button" data-action="change-number">Ndrysho numrin</button>
+      <button class="pro-link" type="button" data-action="resend" disabled>Dërgo kodin prapë</button>
+    </p>
+  </section>
+
+  <!-- Signed in. Step 2 of the guide turns this into the full dashboard. -->
+  <section class="pro-card" data-view="home" hidden aria-labelledby="home-title">
+    <p class="eyebrow">Paneli i mjeshtrit</p>
+    <h1 class="pro-title" id="home-title" tabindex="-1">Mirë se erdhe!</h1>
+    <p class="pro-text">Je i kyçur me <strong id="home-phone"></strong>.</p>
+    <div class="pro-soon">
+      <span class="done-mark" aria-hidden="true"></span>
+      <p class="done-title">Paneli yt po ndërtohet.</p>
+      <p class="done-text">Së shpejti këtu e plotëson profilin, i shton fotot e punëve dhe i sheh thirrjet e vlerësimet.</p>
+    </div>
+    <p class="form-error" id="home-error" role="alert" hidden></p>
+    <button class="btn pro-signout" type="button" data-action="signout">Dil</button>
+  </section>
+</main>
+
+<!-- @sprite -->
+</body>
+</html>

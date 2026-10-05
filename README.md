@@ -294,6 +294,34 @@ Shared sound effects (opt-in) live in `src/loja/sfx/`. The homepage teasers belo
 
 To add a game: create `src/loja/<slug>/index.html` (copy the head, header and sprite from an existing game), add one `<li class="game">` card to `src/loja/index.html`, and optionally a teaser row on the homepage. The build picks up every `index.html` under `src/loja/` for the stylesheet hash and the missing-file checks.
 
+## Mjeshtër panel (/mjeshtri)
+
+Step 1 of the app ([implementation guide](https://claude.ai/code/artifact/51fbc9e3-0603-434c-9676-6f7f0b561ffa)): mjeshtër sign in with their Kosovo mobile number and a 6-digit code sent by SMS. There is no password. Clients never sign in. The signed-in view is a placeholder until step 2 builds the dashboard.
+
+| Path | What it is |
+|---|---|
+| `/mjeshtri/` | The page (`src/mjeshtri/`): phone number, then the code, then the signed-in view |
+| `POST /api/mjeshtri/kodi` | `{ phone, turnstile }`: checks the bot test, then sends a code by SMS |
+| `POST /api/mjeshtri/hyr` | `{ phone, code }`: checks the code and sets the `rr_mjeshtri` cookie (HttpOnly, Secure, SameSite=Lax, 90 days) |
+| `GET /api/mjeshtri/une` | The signed-in mjeshtër, or 401 |
+| `POST /api/mjeshtri/dil` | Signs out |
+
+Tables (`migrations/0002_mjeshtrit.sql`): `pros` (one row per mjeshtër, created as `draft` at first sign-in), `sms_codes` (the current code's keyed hash and the send counters) and `sessions` (SHA-256 of each cookie token). Trades and the 38 municipalities are in `src/mjeshtri/catalog.js`.
+
+**Keeping SMS cheap and safe**
+- Cloudflare Turnstile must pass before any SMS goes out, and only `+383 43–49` mobile numbers get one.
+- One code per number per minute, 5 per number per 24 hours, 10 per network per hour and 20 per day.
+- A code lives 10 minutes, is single-use and is thrown away after 5 wrong guesses. Only an HMAC of it is stored.
+- The answer is the same whether or not a number already has an account. Logs carry event names only, never numbers or codes.
+- A failed send isn't counted and leaves no usable code. Outside local development, the Worker refuses to send codes until the SMS and Turnstile secrets are set.
+
+**Setup before it goes live**
+1. **Turnstile:** Cloudflare dashboard > Turnstile > Add widget for `rregullo.net` (managed mode). Put the **site key** in `site.config.json` as `turnstileSiteKey` (it's public) and the **secret key** in the Worker: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
+2. **SMS (Twilio):** create the account, and check the price per SMS to Kosovo (+383) against a local gateway first. Register `Rregullo` as an alphanumeric sender ID (or buy a number, or use a Messaging Service). Then set `npx wrangler secret put TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`, and set `SMS_FROM` in `wrangler.toml` if it isn't `Rregullo`. To use another provider, replace `sendSms()` in `server/sms.js`; nothing else depends on Twilio.
+3. Deploy. The new migration is applied with `npm run db:migrate` (or by `npm run deploy:auto`).
+
+**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`). `npm run test:app` runs the 20 sign-in checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks.
+
 ## Before launch, please also
 
 - **Native speaker check:** have someone from Kosovo read all the new copy:

@@ -6,6 +6,7 @@
 //   SITE_URL        https://rregullo.net         canonical URL, absolute share image, sitemap
 //   CONTACT_EMAIL   privacy contact shown in the privacy notice (strongly recommended before launch)
 //   INSTAGRAM_URL, FACEBOOK_URL, TIKTOK_URL, LINKEDIN_URL   official profiles, shown only when set
+//   TURNSTILE_SITE_KEY   public Cloudflare Turnstile key for the mjeshtër sign-in (its secret is a Worker secret)
 //
 // A social link is only published when its URL is set, uses https and points at that network's own
 // domain. Nothing here is secret: secrets belong to the Functions (see .dev.vars.example).
@@ -46,6 +47,9 @@ function parseUrl(value, what, hosts) {
 const siteUrl = parseUrl(env.SITE_URL || config.siteUrl, 'SITE_URL').replace(/\/$/, '');
 const contactEmail = (env.CONTACT_EMAIL || config.contactEmail || '').trim();
 if (contactEmail && !/^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i.test(contactEmail)) fail(`CONTACT_EMAIL is not an email address: ${contactEmail}`);
+
+const turnstileSiteKey = (env.TURNSTILE_SITE_KEY || config.turnstileSiteKey || '').trim();
+if (turnstileSiteKey && !/^[0-9A-Za-z_-]{10,64}$/.test(turnstileSiteKey)) fail(`TURNSTILE_SITE_KEY doesn't look like a Turnstile site key: ${turnstileSiteKey}`);
 
 const social = {};
 for (const [key, net] of Object.entries(NETWORKS)) {
@@ -119,16 +123,29 @@ for (const file of gamePages) {
   writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8')).replace('<!-- @sprite -->', sprite));
 }
 
+// /mjeshtri: the mjeshtër panel. Its own CSS and JS get cache-busting hashes; Turnstile only when a site key is set.
+const proPages = ['mjeshtri/index.html'].filter((f) => existsSync(join(dist, f)));
+const appCssHash = hash('mjeshtri/mjeshtri.css');
+const appJsHash = hash('mjeshtri/mjeshtri.js');
+for (const file of proPages) {
+  const html = blocks(readFileSync(join(dist, file), 'utf8'), { turnstile: Boolean(turnstileSiteKey) });
+  writeFileSync(join(dist, file), common(html)
+    .replaceAll('{{APP_CSS_HASH}}', appCssHash)
+    .replaceAll('{{APP_JS_HASH}}', appJsHash)
+    .replaceAll('{{TURNSTILE_SITE_KEY}}', esc(turnstileSiteKey))
+    .replace('<!-- @sprite -->', sprite));
+}
+
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
-  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
+  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
 if (siteUrl) {
   writeFileSync(join(dist, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n</urlset>\n`);
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages, ...gamePages]) {
+for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages, ...gamePages, ...proPages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);
@@ -140,5 +157,6 @@ for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages, .
 }
 
 if (!siteUrl) warn('SITE_URL is not set: no canonical URL or sitemap, and the share image uses a relative URL.');
+if (!turnstileSiteKey) warn('TURNSTILE_SITE_KEY is not set: the mjeshtër sign-in has no bot check, and the Worker refuses to send codes outside local development.');
 if (!contactEmail) warn('CONTACT_EMAIL is not set: the privacy notice has no contact address for data requests. Set it before launch.');
 console.log(`build: dist/ ready (${siteUrl || 'no site URL'}; ${Object.keys(social).length ? Object.keys(social).join(', ') : 'no social links'})`);

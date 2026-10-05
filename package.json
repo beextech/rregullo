@@ -1,7 +1,7 @@
 {
   "name": "rregullo-site",
   "private": true,
-  "description": "Rregullo coming-soon website with launch-notification signup (Cloudflare Workers + static assets + D1)",
+  "description": "Rregullo: coming-soon site with launch signup, and the mjeshtër app (Cloudflare Workers + static assets + D1)",
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -10,10 +10,11 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs && wrangler d1 migrations apply rregullo-launch --local && wrangler dev",
     "db:migrate": "wrangler d1 migrations apply rregullo-launch --remote",
-    "test": "node scripts/test-flow.mjs",
+    "test": "node scripts/test-flow.mjs && node scripts/test-app.mjs",
     "send-launch": "node scripts/send-launch.mjs",
     "deploy": "node scripts/build.mjs && wrangler deploy",
-    "deploy:auto": "node scripts/deploy.mjs"
+    "deploy:auto": "node scripts/deploy.mjs",
+    "test:app": "node scripts/test-app.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.146.0"

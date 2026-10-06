@@ -20,7 +20,7 @@
   X-Robots-Tag: noindex
 
 # "Thirrjet e mia" lives only in the visitor's browser; nothing to index.
-/thirrjet
+/thirrjet/*
   X-Robots-Tag: noindex
   Cache-Control: no-cache
 

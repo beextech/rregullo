@@ -1,10 +1,10 @@
-// End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2) and the team admin (step 3) against the real
+// End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2), the team admin (step 3) and the public directory (step 4) against the real
 // Worker, a local D1 database and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS), Resend
 // (email) and Cloudflare Turnstile. Nothing is sent or stored anywhere else.
 //   npm run test:app      (npm test runs it after the signup tests)
 
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hmac } from '../server/crypto.js';
@@ -13,7 +13,9 @@ import { startMockEmail } from './mock-email.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8792;
 const MOCK_PORT = 8793;
+const OPEN_PORT = 8794;
 const BASE = `http://localhost:${PORT}`;
+const OPEN = `http://localhost:${OPEN_PORT}`;     // a second server on the same state, with the directory open
 const MOCK = `http://127.0.0.1:${MOCK_PORT}`;
 const SECRET = 'test-secret-0123456789abcdefghijklmnopqrstuvwxyz';
 const STATE = join(root, '.wrangler', 'test-app');
@@ -76,27 +78,53 @@ const normalised = (phone) => `+383${phone.replace(/\D/g, '').replace(/^0/, '')}
 
 async function main() {
   console.log('Building and starting the local stack…');
-  execFileSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'ignore', env: { ...process.env, SITE_URL: BASE, TURNSTILE_SITE_KEY: '1x00000000000000000000AA' } });
+  // The directory's homepage switch comes from wrangler.toml here, never from the shell (checked at the end).
+  const buildEnv = { ...process.env, SITE_URL: BASE, TURNSTILE_SITE_KEY: '1x00000000000000000000AA' };
+  delete buildEnv.DIRECTORY_OPEN;
+  execFileSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'ignore', env: buildEnv });
   rmSync(STATE, { recursive: true, force: true });
   execFileSync(wrangler, ['d1', 'migrations', 'apply', 'rregullo-launch', '--local', '--persist-to', STATE], { cwd: root, stdio: 'ignore' });
 
   const mock = await startMockEmail(MOCK_PORT);
   const sms = mock.sms;
-  const dev = spawn(wrangler, ['dev', '--port', String(PORT), '--persist-to', STATE,
-    '--var', `APP_SECRET:${SECRET}`, '--var', `SITE_URL:${BASE}`,
+  // The same settings for both servers; wrangler.toml keeps the directory closed (DIRECTORY_OPEN = "0").
+  const vars = (site, more = []) => ['--var', `APP_SECRET:${SECRET}`, '--var', `SITE_URL:${site}`,
     '--var', 'TWILIO_ACCOUNT_SID:ACtest', '--var', 'TWILIO_AUTH_TOKEN:test-token', '--var', `SMS_API_BASE:${MOCK}`,
     '--var', 'TURNSTILE_SECRET_KEY:test-turnstile', '--var', `TURNSTILE_VERIFY_URL:${MOCK}/turnstile/v0/siteverify`,
-    '--var', `ADMIN_EMAILS:${TEAM.join(',')}`, '--var', 'RESEND_API_KEY:re_test', '--var', `EMAIL_API_BASE:${MOCK}`],
-  { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost', SITE_URL: BASE, TURNSTILE_SITE_KEY: '1x00000000000000000000AA' } });
+    '--var', `ADMIN_EMAILS:${TEAM.join(',')}`, '--var', 'RESEND_API_KEY:re_test', '--var', `EMAIL_API_BASE:${MOCK}`, ...more];
+  // wrangler dev runs the [build] command on start, so it gets the same build settings.
+  const devEnv = { ...buildEnv, NO_PROXY: '127.0.0.1,localhost' };
+  async function ready(base) {
+    for (let i = 0; i < 60; i++) {
+      try { if ((await fetch(`${base}/`)).ok) return; } catch { /* starting */ }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  // The second server (directory open) reads a copy of wrangler.toml without the [build] step, so it never rebuilds
+  // dist/ under the first one.
+  const swap = (s, re, to) => { assert(re.test(s), `wrangler.toml has no ${re}`); return s.replace(re, to); };
+  let openToml = readFileSync(join(root, 'wrangler.toml'), 'utf8');
+  openToml = swap(openToml, /^\[build\]\ncommand = .*\n/m, '');
+  openToml = swap(openToml, /^main = ".*"$/m, `main = ${JSON.stringify(join(root, 'worker', 'index.js'))}`);
+  openToml = swap(openToml, /^directory = "dist"$/m, `directory = ${JSON.stringify(join(root, 'dist'))}`);
+  const openConfig = join(STATE, 'wrangler-open.toml');
+  writeFileSync(openConfig, openToml);
+  const dev = spawn(wrangler, ['dev', '--port', String(PORT), '--persist-to', STATE, ...vars(BASE)],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: devEnv });
   let devLog = '';
   dev.stdout.on('data', (d) => { devLog += d; });
   dev.stderr.on('data', (d) => { devLog += d; });
-  for (let i = 0; i < 60; i++) {
-    try { if ((await fetch(`${BASE}/`)).ok) break; } catch { /* starting */ }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
+  await ready(BASE);
+  // Started once the first one's build is done, as that rebuild would break this one's static files too.
+  const openDev = spawn(wrangler, ['dev', '--config', openConfig, '--port', String(OPEN_PORT), '--inspector-port', '9332', '--persist-to', STATE,
+    ...vars(OPEN, ['--var', 'DIRECTORY_OPEN:1'])], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: devEnv });
+  let openLog = '';
+  openDev.stdout.on('data', (d) => { openLog += d; });
+  openDev.stderr.on('data', (d) => { openLog += d; });
+  await ready(OPEN);
   // What wrangler prints while starting (the variables above among it) is not the Worker's logging.
   const logStart = devLog.length;
+  const openLogStart = openLog.length;
   const lastCode = (to) => {
     const m = [...sms].reverse().find((x) => x.To === to);
     return m && (m.Body.match(/^(\d{6}) /) || [])[1];
@@ -1338,9 +1366,293 @@ async function main() {
       assert(p.log.some((x) => x.action === 'reject' && x.note === 'Foli me të në telefon të hënën.'), 'history lost');
       assert((await me(arben)).status === 401, 'still signed in');
     });
-    await check('68. logs contain no team addresses, phone numbers, tokens or codes', async () => {
+
+    // ---------- step 4: the public directory ----------
+    // BASE keeps the directory closed (wrangler.toml); OPEN is the same Worker, database and photos with DIRECTORY_OPEN=1.
+    const get = async (url, { cookie: c = '' } = {}) => {
+      const res = await request(url, { redirect: 'manual', headers: { 'CF-Connecting-IP': freshIp(), ...(c ? { Cookie: c } : {}) } });
+      return { status: res.status, html: await res.text(), h: (k) => res.headers.get(k) || '' };
+    };
+    const cardsOf = (html) => [...html.matchAll(/<li class="dir-card" data-m="([^"]+)"/g)].map((m) => m[1]);
+    const tap = (base, body, { ip = freshIp(), cookie: c = '', type = 'application/json' } = {}) => request(`${base}/api/numero`, {
+      method: 'POST', headers: { 'Content-Type': type, Origin: base, 'CF-Connecting-IP': ip, ...(c ? { Cookie: c } : {}) },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    }).then((res) => res.status);
+    const openMe = (c) => request(`${OPEN}/api/mjeshtri/une`, { headers: { Cookie: c } }).then((res) => res.json());
+    const today = () => new Date().toISOString().slice(0, 10);
+    const SOON = 'Lista e mjeshtrave hapet së shpejti.';
+    const NOINDEX = '<meta name="robots" content="noindex">';
+    const DRITA = { ...FULL, name: "Dritë O'Hara & Bijtë", about: 'Punoj si elektricist prej 10 vitesh. <script>alert(1)</script> </script><!-- Instalime dhe riparime.', trades: ['elektricist'], towns: ['gjilan', 'kamenice'], years: 10, priceNote: 'nga 15 €', whatsapp: true, viber: true };
+    let drita = '';
+    let dritaId = '';
+    let dritaHandle = '';
+    let dritaPath = '';
+
+    console.log('Public directory: the address and the closed directory');
+    await check('68. approving gives a profile its public address, which never changes; the dashboard shows it only once the directory is open', async () => {
+      drita = await newPro('044 500 100');
+      dritaId = proId('+38344500100');
+      const saved = await api('/api/mjeshtri/profili', DRITA, { cookie: drita });
+      assert(saved.status === 200 && saved.data.dashboard.profile.about === DRITA.about, JSON.stringify(saved.data).slice(0, 200));
+      assert((await upload('profili', JPEG, { cookie: drita })).status === 200, 'photo');
+      assert((await api('/api/mjeshtri/dergo', {}, { cookie: drita })).data.dashboard.status === 'pending', 'send');
+      const p = await detail(dritaId);
+      assert(p.publicPath === null && sql(`SELECT handle FROM pros WHERE id = '${dritaId}'`)[0].handle === null, 'an address before approval');
+      const ok = await decide(dritaId, 'approve', { seenEditedAt: p.editedAt, notify: false });
+      assert(ok.status === 200 && ok.data.pro.status === 'approved', JSON.stringify(ok.data).slice(0, 200));
+      dritaHandle = sql(`SELECT handle FROM pros WHERE id = '${dritaId}'`)[0].handle;
+      assert(/^[a-z2-9]{10}$/.test(dritaHandle), `handle ${dritaHandle}`);
+      dritaPath = `/m/drite-o-hara-bijte-${dritaHandle}`;
+      assert(ok.data.pro.publicPath === dritaPath, `team sees ${ok.data.pro.publicPath}`);
+      // Closed: the mjeshtër isn't given an address nobody can open yet; open: it is there.
+      const closed = (await me(drita)).data.dashboard;
+      assert(closed.status === 'approved' && closed.publicPath === null, `closed: ${closed.publicPath}`);
+      assert((await openMe(drita)).dashboard.publicPath === dritaPath, 'open: no address on the dashboard');
+      // Sent back and approved again: the same address; none while not approved.
+      const back = await decide(dritaId, 'reject', { note: 'Shto foto të punëve.', notify: false });
+      assert(back.status === 200 && back.data.pro.publicPath === null, `rejected: ${back.data.pro && back.data.pro.publicPath}`);
+      assert((await openMe(drita)).dashboard.publicPath === null, 'an address while rejected');
+      const again = await decide(dritaId, 'approve', { seenEditedAt: back.data.pro.editedAt, notify: false });
+      assert(again.status === 200 && again.data.pro.publicPath === dritaPath, `again: ${again.data.pro && again.data.pro.publicPath}`);
+      assert(sql(`SELECT handle FROM pros WHERE id = '${dritaId}'`)[0].handle === dritaHandle, 'the handle changed');
+    });
+    await check('69. closed: the public sees "coming soon"; the signed-in team sees the real pages as a private, unindexed preview', async () => {
+      for (const path of ['/kerko', '/kerko?zanati=elektricist&komuna=gjilan', dritaPath]) {
+        for (const c of ['', drita]) {
+          const r = await get(`${BASE}${path}`, { cookie: c });
+          assert(r.status === 200 && r.html.includes(SOON) && !r.html.includes('Hoxha') && !r.html.includes("O'Hara") && !r.html.includes('dir-card'), `${path}${c ? ' (the mjeshtër)' : ''} → ${r.status}`);
+        }
+      }
+      const s = await get(`${BASE}/kerko?zanati=elektricist&komuna=gjilan`, { cookie: ekipi1 });
+      assert(s.status === 200 && cardsOf(s.html).join() === dritaHandle, `search → ${s.status} ${cardsOf(s.html)}`);
+      const p = await get(`${BASE}${dritaPath}`, { cookie: ekipi1 });
+      assert(p.status === 200 && p.html.includes("Dritë O'Hara &amp; Bijtë"), `profile → ${p.status}`);
+      for (const [what, r] of [['search', s], ['profile', p]]) {
+        assert(r.html.includes('<main class="dir" id="main" data-preview>') && r.html.includes('class="dir-preview"'), `${what}: no preview banner`);
+        assert(r.html.includes(NOINDEX) && /noindex/.test(r.h('X-Robots-Tag')), `${what}: indexable`);
+        assert(r.h('Cache-Control') === 'private, no-store', `${what}: Cache-Control ${r.h('Cache-Control')}`);
+      }
+      assert(!p.html.includes('application/ld+json') && !p.html.includes('og:title'), 'the preview carries share data');
+    });
+    await check('70. closed: /api/numero answers 204 and counts nothing, for anyone', async () => {
+      for (const c of ['', ekipi1, besa]) {
+        for (const lloji of ['shikim', 'thirrje', 'whatsapp', 'viber']) assert(await tap(BASE, { m: dritaHandle, lloji }, { cookie: c }) === 204, `${lloji} → not 204`);
+      }
+      assert(sql(`SELECT COUNT(*) AS n FROM pro_stats_daily WHERE pro_id = '${dritaId}'`)[0].n === 0, 'counted while closed');
+    });
+
+    console.log('Public directory: searching');
+    // Bojaxhi in Viti: who is shown and in what order. Then 25 for Saldim in Mamushë, for the pages.
+    const LONG = 'Lyej shtëpi, banesa dhe zyre me kujdes dhe pastërti, me ngjyra cilësore.';
+    const dirRow = (key, name, o = {}) => {
+      const r = { trades: '["bojaxhi"]', towns: '["viti"]', status: 'approved', available: 1, about: LONG, years: 5, verified: 0, whatsapp: 0, viber: 0, ...o };
+      const t = Date.now() - 86400000;
+      return `('test-d-${key}', '+3834980${String(dirRow.n++).padStart(4, '9')}', '${name}', '${r.about}', '${r.trades}', '${r.towns}', ${r.years === null ? 'NULL' : r.years}, ${r.whatsapp}, ${r.viber}, ${r.available}, '${r.status}', ${r.verified}, ${t}, ${t}, ${t}, ${t}, 'dtest${key.repeat(5)}')`;
+    };
+    dirRow.n = 1;
+    const H = (key) => `dtest${key.repeat(5)}`;
+    await check('71. a search lists only approved profiles of that trade and town: available first, then the more complete, then Verifikuar', async () => {
+      const pages = 'abcdefghijklmnopqrstuvwxy'.split('').map((k) => dirRow(`p${k}`, `Saldim ${k.toUpperCase()}`, { trades: '["saldim"]', towns: '["mamushe"]' }));
+      sql(`INSERT INTO pros (id, phone, name, about, trades, towns, years, whatsapp, viber, available, status, verified, created_at, updated_at, submitted_at, approved_at, handle) VALUES
+        ${dirRow('k', 'Rend Kujtim', { verified: 1 })},
+        ${dirRow('c', 'Rend Cena', { towns: '["prishtine","viti"]', whatsapp: 1 })},
+        ${dirRow('b', 'Rend Bekim', { trades: '["murator","bojaxhi"]', about: '', years: null })},
+        ${dirRow('a', 'Rend Agron', { available: 0 })},
+        ${dirRow('d', 'Rend Dardan', { trades: '["murator"]' })},
+        ${dirRow('e', 'Rend Erion', { towns: '["lipjan"]' })},
+        ${dirRow('f', 'Rend Fatos', { status: 'pending' })},
+        ${dirRow('g', 'Rend Gent', { status: 'draft' })},
+        ${dirRow('h', 'Rend Hana', { status: 'rejected' })},
+        ${dirRow('i', 'Rend Ilir', { status: 'suspended' })},
+        ${pages.join(',\n')}`);
+      const r = await get(`${OPEN}/kerko?zanati=bojaxhi&komuna=viti`);
+      assert(r.status === 200 && !r.html.includes('data-preview') && !r.html.includes(NOINDEX) && !r.h('X-Robots-Tag'), `status ${r.status}`);
+      // Kujtim and Cena: available and complete (Kujtim Verifikuar); Bekim: available, less complete; Agron: not available.
+      assert(cardsOf(r.html).join() === ['k', 'c', 'b', 'a'].map(H).join(), cardsOf(r.html).join());
+      assert(r.html.includes('<h1 class="dir-title" id="dir-title">Bojaxhi në Viti</h1>') && r.html.includes('>4 mjeshtër<'), 'title or count');
+      assert(r.html.includes(`<link rel="canonical" href="${OPEN}/kerko?zanati=bojaxhi&amp;komuna=viti">`), 'canonical');
+      assert(r.html.includes('<option value="bojaxhi" selected>') && r.html.includes('<option value="viti" selected>'), 'the form keeps the search');
+      assert(r.html.includes('Tani për tani nuk merr punë') && r.html.includes('Merr punë tani') && r.html.includes('Verifikuar</span>'), 'availability or badge');
+      const ids = async (q) => cardsOf((await get(`${OPEN}/kerko${q}`)).html).sort().join();
+      assert(await ids('?zanati=bojaxhi') === ['a', 'b', 'c', 'e', 'k'].map(H).join(), `trade only: ${await ids('?zanati=bojaxhi')}`);
+      assert(await ids('?komuna=viti') === ['a', 'b', 'c', 'd', 'k'].map(H).join(), `town only: ${await ids('?komuna=viti')}`);
+      assert(await ids('?zanati=elektricist&komuna=kamenice') === dritaHandle, 'a profile with several towns');
+    });
+    await check('72. unknown search values are ignored; no results: the empty state with wider searches, never indexed', async () => {
+      const odd = await get(`${OPEN}/kerko?zanati=nope&komuna=viti&faqja=abc`);
+      assert(odd.status === 200 && cardsOf(odd.html).sort().join() === ['a', 'b', 'c', 'd', 'k'].map(H).join(), cardsOf(odd.html).join());
+      assert(odd.html.includes('>Mjeshtër në Viti</h1>') && odd.html.includes(`<link rel="canonical" href="${OPEN}/kerko?komuna=viti">`), 'the unknown trade counted');
+      const xss = await get(`${OPEN}/kerko?zanati=%3Cscript%3Ealert(1)%3C/script%3E&komuna=%22%3E%3Cb%3E&faqja=-1`);
+      assert(xss.status === 200 && !xss.html.includes('alert(1)') && !xss.html.includes('"><b>') && xss.html.includes('>Gjej mjeshtër</h1>'), `status ${xss.status}`);
+      const none = await get(`${OPEN}/kerko?zanati=kulmi&komuna=junik`);
+      assert(none.status === 200 && cardsOf(none.html).length === 0 && none.html.includes('Ende nuk kemi mjeshtër për këtë kërkim.'), `status ${none.status}`);
+      assert(none.html.includes('<a href="/kerko?zanati=kulmi">Kërko në gjithë Kosovën</a>') && none.html.includes('<a href="/kerko?komuna=junik">Shiko të gjitha zanatet në Junik</a>'), 'wider searches');
+      assert(none.html.includes(NOINDEX) && /noindex/.test(none.h('X-Robots-Tag')), 'an empty search is indexable');
+      assert((await request(`${OPEN}/kerko`, { method: 'POST', headers: { Origin: OPEN } })).status === 405, 'POST');
+    });
+    await check('73. results come 20 to a page; the pages link to each other and only the first is indexed', async () => {
+      const q = '?zanati=saldim&komuna=mamushe';
+      const p1 = await get(`${OPEN}/kerko${q}`);
+      const p2 = await get(`${OPEN}/kerko${q}&faqja=2`);
+      const c1 = cardsOf(p1.html);
+      const c2 = cardsOf(p2.html);
+      assert(c1.length === 20 && c2.length === 5 && new Set([...c1, ...c2]).size === 25 && [...c1, ...c2].every((h) => /^dtest(p[a-y]){5}$/.test(h)), `${c1.length} + ${c2.length}`);
+      assert(p1.html.includes('25 mjeshtër, faqja 1 nga 2') && p1.html.includes('rel="next" href="/kerko?zanati=saldim&amp;komuna=mamushe&amp;faqja=2"') && !p1.html.includes('rel="prev"'), 'page 1 links');
+      assert(p2.html.includes('rel="prev" href="/kerko?zanati=saldim&amp;komuna=mamushe"') && !p2.html.includes('rel="next"') && p2.html.includes('Faqja 2 nga 2'), 'page 2 links');
+      assert(!p1.html.includes(NOINDEX) && p2.html.includes(NOINDEX), 'indexing');
+      assert(cardsOf((await get(`${OPEN}/kerko${q}&faqja=99`)).html).join() === c2.join(), 'past the last page: not the last page');
+      assert(cardsOf((await get(`${OPEN}/kerko${q}`)).html).join() === c1.join(), 'the order changes between requests');
+    });
+
+    console.log('Public directory: profiles');
+    await check('74. a profile shows name, trades, towns and the contact links switched on; text is escaped everywhere', async () => {
+      const r = await get(`${OPEN}${dritaPath}`);
+      const html = r.html;
+      assert(r.status === 200 && html.includes(`<h1 class="dir-profile-name">Dritë O'Hara &amp; Bijtë</h1>`), `status ${r.status}`);
+      assert(html.includes('<p class="dir-trades">Elektricist</p>') && html.includes('<li>Punon në Gjilan, Kamenicë</li>') && html.includes('<li>10 vjet përvojë</li>') && html.includes('<li>nga 15 €</li>'), 'facts');
+      assert(html.includes('href="tel:+38344500100"') && html.includes('href="https://wa.me/38344500100"') && html.includes('href="viber://chat?number=%2B38344500100"'), 'contact links');
+      assert(/<img src="\/foto\/[0-9a-f-]{36}\.jpg"/.test(html), 'profile photo');
+      assert(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &lt;/script&gt;&lt;!-- Instalime dhe riparime.'), 'about not escaped');
+      assert(html.match(/<script\b/g).length === 2 && !html.includes('<!-- Instalime'), 'a script from the profile text');
+      const ld = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1];
+      assert(!ld.includes('<'), `JSON-LD carries a raw <: ${ld.slice(0, 120)}`);
+      const data = JSON.parse(ld);
+      assert(data.name === DRITA.name && data.description === DRITA.about && data.telephone === '+38344500100' && data.url === `${OPEN}${dritaPath}`, JSON.stringify(data));
+      assert(html.includes(`<link rel="canonical" href="${OPEN}${dritaPath}">`) && !html.includes(NOINDEX) && !r.h('X-Robots-Tag') && !html.includes('data-preview'), 'canonical or indexing');
+      assert(html.includes(`data-m="${dritaHandle}"`) && html.includes('data-view'), 'counting hooks');
+      // WhatsApp and Viber only when switched on.
+      const none = (await get(`${OPEN}/m/rend-bekim-${H('b')}`)).html;
+      assert(none.includes('href="tel:+') && !none.includes('wa.me') && !none.includes('viber://'), 'Bekim has neither');
+      const wa = (await get(`${OPEN}/m/rend-cena-${H('c')}`)).html;
+      assert(wa.includes('wa.me') && !wa.includes('viber://'), 'Cena has WhatsApp only');
+    });
+    await check('75. other addresses: a stale or capitalised name redirects; unknown, unapproved and suspended profiles are not found', async () => {
+      for (const slug of [`emri-i-vjeter-${dritaHandle}`, dritaHandle, `drite-o-hara-bijte-${dritaHandle}`.toUpperCase(), `Drite-O-Hara-Bijte-${dritaHandle}`]) {
+        const r = await get(`${OPEN}/m/${slug}`);
+        assert(r.status === 301 && r.h('Location') === dritaPath, `${slug} → ${r.status} ${r.h('Location')}`);
+      }
+      for (const path of ['/m/askush-zzzzzzzzzz', '/m/x', `/m/rend-fatos-${H('f')}`, `/m/rend-gent-${H('g')}`, `/m/rend-hana-${H('h')}`, `/m/rend-ilir-${H('i')}`]) {
+        const r = await get(`${OPEN}${path}`);
+        assert(r.status === 404 && r.html.includes('Ky profil nuk u gjet.'), `${path} → ${r.status}`);
+      }
+      // Suspended by the team: gone from its address and from the search at once.
+      const s = await decide('test-d-c', 'suspend', { note: 'Ankesa nga klientët.' });
+      assert(s.status === 200 && s.data.pro.status === 'suspended', `suspend → ${s.status}`);
+      assert((await get(`${OPEN}/m/rend-cena-${H('c')}`)).status === 404, 'a suspended profile is shown');
+      assert(cardsOf((await get(`${OPEN}/kerko?zanati=bojaxhi&komuna=viti`)).html).join() === ['k', 'b', 'a'].map(H).join(), 'a suspended profile is listed');
+    });
+
+    console.log('Public directory: counting');
+    await check('76. views and taps are counted per kind and day, once per network address; the Ballina shows them', async () => {
+      const [ip1, ip2] = [freshIp(), freshIp()];
+      for (const [lloji, ip] of [['shikim', ip1], ['shikim', ip1], ['shikim', ip2], ['thirrje', ip1], ['thirrje', ip1], ['whatsapp', ip1], ['viber', ip2], ['viber', ip2]]) {
+        assert(await tap(OPEN, { m: dritaHandle, lloji }, { ip }) === 204, `${lloji} → not 204`);
+      }
+      const [row] = sql(`SELECT views, calls, whatsapp, viber FROM pro_stats_daily WHERE pro_id = '${dritaId}' AND day = '${today()}'`);
+      assert(row && row.views === 2 && row.calls === 1 && row.whatsapp === 1 && row.viber === 1, JSON.stringify(row));
+      const s = (await me(drita)).data.dashboard.stats;
+      assert(s.views === 2 && s.calls === 1 && s.whatsapp === 1 && s.viber === 1, JSON.stringify(s));
+    });
+    await check('77. nothing counted for unknown kinds or profiles, unapproved ones, the team, the mjeshtër themself, or past 300 a day from one address', async () => {
+      const h = dritaHandle;
+      for (const body of [{ m: h, lloji: 'email' }, { m: h, lloji: 'views' }, { m: h, lloji: '' }, { m: h }, { m: h.toUpperCase(), lloji: 'shikim' }, { m: 42, lloji: 'shikim' },
+        { m: 'zzzzzzzzzz', lloji: 'shikim' }, { m: H('f'), lloji: 'shikim' }, { m: H('g'), lloji: 'thirrje' }, { m: H('h'), lloji: 'shikim' }, { m: H('i'), lloji: 'shikim' }, { m: H('c'), lloji: 'shikim' },
+        '{"m":', 'x'.repeat(9000)]) {
+        assert(await tap(OPEN, body) === 204, `${JSON.stringify(body).slice(0, 40)} → not 204`);
+      }
+      assert(await tap(OPEN, { m: h, lloji: 'shikim' }, { type: 'text/plain' }) === 204, 'text/plain');
+      assert(await tap(OPEN, { m: h, lloji: 'shikim' }, { cookie: ekipi1 }) === 204, 'team');
+      assert(await tap(OPEN, { m: h, lloji: 'thirrje' }, { cookie: drita }) === 204, 'own profile');
+      const capped = freshIp();
+      const bucket = await hmac(SECRET, 'tap-ip', `${capped}|${today()}`);
+      const now = Date.now();
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 300 }, (_, i) => `('${bucket}', ${now - 1000 - i})`).join(', ')}`);
+      assert(await tap(OPEN, { m: h, lloji: 'whatsapp' }, { ip: capped }) === 204, 'capped');
+      assert((await request(`${OPEN}/api/numero`)).status === 405, 'GET');
+      // Another mjeshtër looking is a client like any other.
+      assert(await tap(OPEN, { m: h, lloji: 'shikim' }, { cookie: besa }) === 204, 'another mjeshtër');
+      const rows = sql('SELECT pro_id, day, views, calls, whatsapp, viber FROM pro_stats_daily');
+      assert(rows.length === 1 && rows[0].pro_id === dritaId && rows[0].day === today(), JSON.stringify(rows));
+      const r = rows[0];
+      assert(r.views === 3 && r.calls === 1 && r.whatsapp === 1 && r.viber === 1, JSON.stringify(r));
+    });
+    await check('78. a tap sent from another site or from http:// is never counted (handler called directly)', async () => {
+      // wrangler dev rewrites Origin, so this calls the handler as the live Worker would see the request.
+      const { getPlatformProxy } = await import('wrangler');
+      const { numero } = await import('../functions/drejtoria.js');
+      const proxy = await getPlatformProxy({ persist: false });
+      try {
+        const db = proxy.env.DB;
+        await applyMigrations(db);
+        await db.prepare(`INSERT INTO pros (id, phone, name, trades, towns, status, created_at, updated_at, approved_at, handle)
+          VALUES ('live-d', '+38344900121', 'Dren Live', '["bojaxhi"]', '["viti"]', 'approved', 1, 1, 1, 'livehandle')`).run();
+        const live = { DB: db, SITE_URL: 'https://rregullo.net', APP_SECRET: SECRET, DIRECTORY_OPEN: '1' };
+        const call = (env, origin) => numero.onRequestPost({
+          env, waitUntil() {},
+          request: new Request('https://rregullo.net/api/numero', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': freshIp(), Origin: origin }, body: JSON.stringify({ m: 'livehandle', lloji: 'thirrje' }),
+          }),
+        });
+        const calls = async () => ((await db.prepare("SELECT calls FROM pro_stats_daily WHERE pro_id = 'live-d'").first()) || { calls: 0 }).calls;
+        for (const origin of ['https://evil.example', 'http://rregullo.net', 'https://rregullo.net.evil.example', 'null']) {
+          const r = await call(live, origin);
+          assert(r.status === 204 && r.headers.get('Cache-Control') === 'no-store', `${origin} → ${r.status}`);
+        }
+        assert((await call({ ...live, DIRECTORY_OPEN: '0' }, 'https://rregullo.net')).status === 204, 'closed');
+        assert((await call({ ...live, DIRECTORY_OPEN: 'yes' }, 'https://rregullo.net')).status === 204, 'not "1"');
+        assert(await calls() === 0, 'counted');
+        assert((await call(live, 'https://rregullo.net')).status === 204 && await calls() === 1, 'this site: not counted');
+      } finally {
+        await proxy.dispose();
+      }
+    });
+
+    console.log('Public directory: sitemap, Thirrjet e mia, the homepage');
+    await check('79. the sitemap lists /kerko and every approved profile only once the directory is open', async () => {
+      const closed = await (await request(`${BASE}/sitemap.xml`)).text();
+      assert(closed.includes(`<loc>${BASE}/</loc>`) && !closed.includes('/kerko') && !closed.includes('/m/'), closed);
+      const res = await request(`${OPEN}/sitemap.xml`);
+      const xml = await res.text();
+      assert(res.status === 200 && /xml/.test(res.headers.get('Content-Type') || '') && xml.trimEnd().endsWith('</urlset>'), `status ${res.status}`);
+      assert(xml.includes(`<loc>${BASE}/</loc>`) && xml.includes(`<loc>${OPEN}/kerko</loc>`), 'static entries or /kerko');
+      assert(xml.includes(`<loc>${OPEN}${dritaPath}</loc><lastmod>${today()}</lastmod>`) && xml.includes(`<loc>${OPEN}/m/rend-agron-${H('a')}</loc>`), 'approved profiles');
+      for (const k of ['c', 'f', 'g', 'h', 'i']) assert(!xml.includes(H(k)), `${k} listed`);
+      const approved = sql("SELECT COUNT(*) AS n FROM pros WHERE status = 'approved' AND handle IS NOT NULL")[0].n;
+      assert((xml.match(/\/m\//g) || []).length === approved, `${(xml.match(/\/m\//g) || []).length} profiles of ${approved}`);
+    });
+    await check('80. /thirrjet serves "Thirrjet e mia", never indexed', async () => {
+      const res = await request(`${BASE}/thirrjet`);
+      const html = await res.text();
+      assert(res.status === 200 && html.includes('id="calls-title"') && html.includes('Thirrjet e mia') && !/\{\{\w+\}\}|<!-- @/.test(html), `status ${res.status}`);
+      assert(/noindex/.test(res.headers.get('X-Robots-Tag') || '') && html.includes(NOINDEX), `X-Robots-Tag: ${res.headers.get('X-Robots-Tag')}`);
+      const assets = [...html.matchAll(/(?:src|href)="(\/kerko\/[^"?]+)\?v=[0-9a-f]+"/g)].map((m) => m[1]);
+      assert(assets.includes('/kerko/kerko.js') && assets.includes('/kerko/kerko.css'), assets.join());
+      for (const a of assets) assert((await request(`${BASE}${a}`)).status === 200, `${a} not served`);
+      assert((await (await request(`${BASE}/robots.txt`)).text()).includes('Disallow: /thirrjet'), 'robots.txt');
+    });
+    // Rebuilding dist/ under the running servers breaks their static files, so this comes last of the HTTP checks.
+    await check('81. the build: DIRECTORY_OPEN=1 swaps the homepage signup for the search box; without it the signup stays', async () => {
+      const index = () => readFileSync(join(root, 'dist', 'index.html'), 'utf8');
+      const build = (env) => execFileSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'ignore', env });
+      let open = '';
+      try {
+        build({ ...buildEnv, DIRECTORY_OPEN: '1' });
+        open = index();
+      } finally {
+        build(buildEnv);   // back to what the servers serve
+      }
+      assert(open.includes('data-home-find') && open.includes('<form class="find" action="/kerko" method="get"'), 'no search box');
+      assert(/<select[^>]* id="home-zanati" name="zanati">/.test(open) && /<select[^>]* id="home-komuna" name="komuna">/.test(open), 'trade and town');
+      assert(!open.includes('data-signup') && !open.includes('action="/api/subscribe"'), 'the signup is still there');
+      const closed = index();
+      assert(closed.includes('data-signup') && closed.includes('action="/api/subscribe"') && !closed.includes('data-home-find'), 'the default build lost the signup');
+    });
+
+
+    console.log('Logs');
+    await check('82. logs contain no team addresses, phone numbers, tokens or codes', async () => {
       // Photo ids and pro ids are random UUIDs, and their digits can look like a number or a code by chance: leave them out.
-      const scanned = devLog.slice(logStart).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
+      const scanned = (devLog.slice(logStart) + openLog.slice(openLogStart)).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
       const at = (i) => JSON.stringify(scanned.slice(Math.max(0, i - 80), i + 40));
       const email = scanned.match(/[a-z0-9.+-]+@rregullo\.test/i);
       assert(!email, `an address appears in the logs: ${email && at(email.index)}`);
@@ -1361,6 +1673,7 @@ async function main() {
     });
   } finally {
     dev.kill('SIGTERM');
+    openDev.kill('SIGTERM');
     mock.server.close();
   }
   console.log(`\n${passed} passed, ${failures.length} failed`);

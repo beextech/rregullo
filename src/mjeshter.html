@@ -60,8 +60,21 @@
     </div>
 
     <form class="mj-form" method="post" novalidate data-mj-form aria-labelledby="mj-form-title">
+      <fieldset class="mj-field mj-group">
+        <legend class="mj-label">Punon si</legend>
+        <div class="mj-chips mj-chips-pair">
+          <label class="mj-chip"><input type="radio" name="lloji" value="Individ" checked data-kind><span>Individ</span></label>
+          <label class="mj-chip"><input type="radio" name="lloji" value="Kompani" data-kind><span>Kompani</span></label>
+        </div>
+        <div class="mj-other" data-company hidden>
+          <label class="mj-label mj-label-soft" for="mj-company">Emri i kompanisë</label>
+          <input class="field-input" id="mj-company" name="kompania" type="text" autocomplete="organization" maxlength="80" aria-describedby="mj-company-error">
+          <p class="field-error" id="mj-company-error" hidden></p>
+        </div>
+      </fieldset>
+
       <div class="mj-field">
-        <label class="mj-label" for="mj-name">Emri dhe mbiemri</label>
+        <label class="mj-label" for="mj-name" data-name-label>Emri dhe mbiemri</label>
         <input class="field-input" id="mj-name" name="emri" type="text" autocomplete="name" autocapitalize="words" maxlength="80" required aria-describedby="mj-name-error">
         <p class="field-error" id="mj-name-error" hidden></p>
       </div>
@@ -101,9 +114,9 @@
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Saldator"><span>Saldator</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Zdrukthëtar"><span>Zdrukthëtar</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Mobileri"><span>Mobileri</span></label>
-          <label class="mj-chip"><input type="checkbox" name="zanati" value="Klimatizim"><span>Klimatizim</span></label>
+          <label class="mj-chip"><input type="checkbox" name="zanati" value="Klima"><span>Klima</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Mekanik"><span>Mekanik</span></label>
-          <label class="mj-chip"><input type="checkbox" name="zanati" value="Çati"><span>Çati</span></label>
+          <label class="mj-chip"><input type="checkbox" name="zanati" value="Kulma"><span>Kulma</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Fasada"><span>Fasada</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Alumin/PVC"><span>Alumin/PVC</span></label>
           <label class="mj-chip"><input type="checkbox" name="zanati" value="Dyer dhe dritare"><span>Dyer dhe dritare</span></label>
@@ -140,17 +153,8 @@
       <div class="mj-extra">
         <p class="mj-extra-title">Opsionale</p>
         <div class="mj-field">
-          <label class="mj-label" for="mj-whatsapp">Numri i WhatsApp-it <span class="mj-hint">nëse është tjetër</span></label>
-          <input class="field-input" id="mj-whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="off" maxlength="24" aria-describedby="mj-whatsapp-error">
-          <p class="field-error" id="mj-whatsapp-error" hidden></p>
-        </div>
-        <div class="mj-field">
           <label class="mj-label" for="mj-social">Instagram ose Facebook</label>
           <input class="field-input" id="mj-social" name="rrjetet" type="text" autocapitalize="off" spellcheck="false" placeholder="@emri ose linku" maxlength="120">
-        </div>
-        <div class="mj-field">
-          <label class="mj-label" for="mj-web">Website</label>
-          <input class="field-input" id="mj-web" name="website" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="emri.com" maxlength="120">
         </div>
       </div>
 

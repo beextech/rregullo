@@ -7,7 +7,7 @@ const MSG = {
   name: 'Shkruaje emrin dhe mbiemrin.',
   phone: 'Shkruaje numrin e telefonit.',
   phoneInvalid: 'Ky numër nuk duket i plotë. Shembull: +383 44 123 456',
-  whatsappInvalid: 'Ky numër nuk duket i plotë. Lëre bosh nëse është i njëjti si telefoni.',
+  company: 'Shkruaje emrin e kompanisë.',
   city: 'Shkruaje qytetin ku punon.',
   trade: 'Zgjedhe zanatin ose shkruaje vetë.',
   tradeOther: 'Shkruaje zanatin tënd.',
@@ -21,15 +21,15 @@ const phoneOk = (s) => /^\+?[\d\s()./-]+$/.test(s) && digits(s) >= 8 && digits(s
 
 export function buildMessage(d) {
   const rows = [
-    ['Emri', d.name],
+    ['Lloji', d.kind],
+    ['Kompania', d.company],
+    [d.kind === 'Kompani' ? 'Personi kontaktues' : 'Emri', d.name],
     ['Telefoni', d.phone],
     ['Qyteti', d.city],
     ['Zanati', d.trade],
     ['Përvoja', d.experience],
     ['Përshkrimi', d.about],
-    ['WhatsApp', d.whatsapp],
     ['Instagram/Facebook', d.social],
-    ['Website', d.website],
   ].filter(([, v]) => v);
   return ['Përshëndetje, dua të bëhem pjesë e Rregullo.', '', ...rows.map(([k, v]) => `${k}: ${v}`)].join('\n');
 }
@@ -44,6 +44,16 @@ function mount(form) {
   const el = (id) => form.querySelector(`#${id}`);
   const other = form.querySelector('[data-trade-other]');
   const otherInput = el('mj-trade-other');
+  const companyBox = form.querySelector('[data-company]');
+  const nameLabel = form.querySelector('[data-name-label]');
+  const kind = () => form.querySelector('input[name="lloji"]:checked').value;
+  // A company names itself and the person to talk to; an individual only gives their own name.
+  const syncKind = () => {
+    const company = kind() === 'Kompani';
+    companyBox.hidden = !company;
+    nameLabel.textContent = company ? 'Personi kontaktues (emri dhe mbiemri)' : 'Emri dhe mbiemri';
+  };
+  syncKind();
 
   const setError = (target, errorId, text) => {
     const err = el(errorId);
@@ -60,15 +70,15 @@ function mount(form) {
     if (custom) trades.push(custom);
     const exp = form.querySelector('input[name="pervoja"]:checked');
     return {
+      kind: kind(),
+      company: kind() === 'Kompani' ? line(el('mj-company').value) : '',
       name: line(el('mj-name').value),
       phone: line(el('mj-phone').value),
       city: line(el('mj-city').value),
       trade: trades.join(', '),
       experience: exp ? exp.value : '',
       about: el('mj-about').value.trim().replace(/\n{3,}/g, '\n\n'),
-      whatsapp: line(el('mj-whatsapp').value),
       social: line(el('mj-social').value),
-      website: line(el('mj-web').value),
     };
   };
 
@@ -76,6 +86,7 @@ function mount(form) {
   const validate = (d) => {
     const bad = [];
     const check = (ok, target, errorId, text) => { setError(target, errorId, ok ? '' : text); if (!ok) bad.push([].concat(target)[0]); };
+    check(d.kind !== 'Kompani' || d.company.length >= 2, el('mj-company'), 'mj-company-error', MSG.company);
     check(d.name.length >= 2, el('mj-name'), 'mj-name-error', MSG.name);
     check(d.phone && phoneOk(d.phone), el('mj-phone'), 'mj-phone-error', d.phone ? MSG.phoneInvalid : MSG.phone);
     check(d.city.length >= 2, el('mj-city'), 'mj-city-error', MSG.city);
@@ -85,7 +96,6 @@ function mount(form) {
     check(d.trade && !otherMissing, otherMissing ? otherInput : tradeBoxes, 'mj-trade-error', otherMissing ? MSG.tradeOther : MSG.trade);
     const expBoxes = [...form.querySelectorAll('input[name="pervoja"]')];
     check(Boolean(d.experience), expBoxes, 'mj-exp-error', MSG.experience);
-    check(!d.whatsapp || phoneOk(d.whatsapp), el('mj-whatsapp'), 'mj-whatsapp-error', MSG.whatsappInvalid);
     return bad[0] || null;
   };
 
@@ -114,6 +124,7 @@ function mount(form) {
   form.addEventListener('input', () => { if (tried) { const first = validate(read()); formError.hidden = !first; } });
   form.addEventListener('change', (e) => {
     if (e.target === other && other.checked) otherInput.focus();
+    if (e.target.matches('[data-kind]')) { syncKind(); if (kind() === 'Kompani') el('mj-company').focus(); }
     if (tried) { const first = validate(read()); formError.hidden = !first; }
   });
 

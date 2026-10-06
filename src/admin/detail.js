@@ -183,6 +183,8 @@ function renderStatus() {
   const note = (p.status === 'rejected' || p.status === 'suspended') && p.statusNote;
   $('#d-state-note').hidden = !note;
   $('#d-state-note-text').textContent = note || '';
+  $('#d-public').hidden = !p.publicPath;
+  if (p.publicPath) $('#d-public-a').href = p.publicPath;
   $('#d-verified-mark').hidden = !p.verified;
   $('#d-verify').setAttribute('aria-checked', String(Boolean(p.verified)));
 

@@ -3,6 +3,7 @@
 // always scoped to the signed-in mjeshtër's id.
 
 import { LIMITS, TOWN_SLUGS, TRADE_SLUGS } from '../src/mjeshtri/catalog.js';
+import { profilePath } from './handle.js';
 import { formatPhone } from './signin.js';
 import { log } from './subscribers.js';
 
@@ -173,7 +174,7 @@ export async function loadDashboard(cfg, proId, now) {
   const db = cfg.db;
   const row = await db.prepare(
     `SELECT phone, name, about, trades, towns, years, price_note, whatsapp, viber, available, status, status_note,
-            verified, submitted_at FROM pros WHERE id = ?1`,
+            verified, submitted_at, handle FROM pros WHERE id = ?1`,
   ).bind(proId).first();
   if (!row) return null;
   const profile = {
@@ -189,6 +190,8 @@ export async function loadDashboard(cfg, proId, now) {
     statusNote: row.status_note,
     verified: row.verified === 1,
     submittedAt: row.submitted_at,
+    // Where clients find the profile, once it is approved and the directory is open.
+    publicPath: row.status === 'approved' && row.handle && cfg.directoryOpen ? profilePath(row.name, row.handle) : null,
     photos,
     photosEnabled: Boolean(cfg.photos),
     stats,

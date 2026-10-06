@@ -224,10 +224,19 @@ function renderBallina() {
   const [title, text] = STATES[dash.status] || STATES.draft;
   $('#state-card').dataset.state = dash.status;
   $('#state-title').textContent = title;
-  $('#state-text').textContent = text;
+  // Approved and the directory open: clients can find them now, not "soon".
+  $('#state-text').textContent = dash.status === 'approved' && dash.publicPath
+    ? 'Klientët të gjejnë kur kërkojnë zanatin dhe komunën tënde.' : text;
   const note = (dash.status === 'rejected' || dash.status === 'suspended') && dash.statusNote;
   $('#state-note').hidden = !note;
   $('#state-note-text').textContent = note || '';
+  // Once approved and the directory is open: the profile's own address, to share with clients.
+  $('#public-link').hidden = !dash.publicPath;
+  if (dash.publicPath) {
+    const a = $('#public-link-a');
+    a.href = dash.publicPath;
+    a.textContent = `${location.host}${dash.publicPath}`;
+  }
 
   const sw = $('#available');
   sw.setAttribute('aria-checked', String(dash.available));

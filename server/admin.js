@@ -6,6 +6,7 @@
 import { readConfig } from './config.js';
 import { hmac, randomToken, safeEqual, sha256, uuid } from './crypto.js';
 import { sendEmail } from './email.js';
+import { newHandle, profilePath } from './handle.js';
 import { cleanText, loadDashboard } from './profile.js';
 import { MESSAGES, formatPhone, missingCoreConfig, readAppConfig, readCookie } from './signin.js';
 import { sendSms, smsConfigured } from './sms.js';
@@ -312,7 +313,7 @@ export async function loadPro(cfg, id, now) {
   if (!validId(id)) return null;
   const db = cfg.db;
   const row = await db.prepare(
-    'SELECT id, phone, status, created_at, updated_at, approved_at, edited_at, last_login_at FROM pros WHERE id = ?1',
+    'SELECT id, phone, name, handle, status, created_at, updated_at, approved_at, edited_at, last_login_at FROM pros WHERE id = ?1',
   ).bind(id).first();
   if (!row) return null;
   const [dash, history] = await Promise.all([
@@ -338,6 +339,8 @@ export async function loadPro(cfg, id, now) {
     updatedAt: row.updated_at,
     submittedAt: dash.submittedAt,
     approvedAt: row.approved_at,
+    // The public profile's address; the team can open it even before the directory opens.
+    publicPath: dash.status === 'approved' && row.handle ? profilePath(dash.profile.name, row.handle) : null,
     editedAt: row.edited_at,
     changedSinceApproval: changedSince(row),
     lastLoginAt: row.last_login_at,
@@ -438,9 +441,10 @@ export async function decide(cfg, admin, pro, d, now) {
       return { result: 'missing', missing: pro.checklist.items.filter((i) => i.required && !i.done).map((i) => i.key) };
     }
     res = await db.prepare(
-      `UPDATE pros SET status = 'approved', status_note = '', approved_at = ?2, updated_at = ?2
+      // The first approval also gives the profile its public address (/m/<name>-<handle>), which never changes.
+      `UPDATE pros SET status = 'approved', status_note = '', approved_at = ?2, updated_at = ?2, handle = COALESCE(handle, ?4)
        WHERE id = ?1 AND status IN ('draft', 'pending', 'rejected') AND edited_at IS ?3`,
-    ).bind(pro.id, now, d.seenEditedAt).run();
+    ).bind(pro.id, now, d.seenEditedAt, newHandle()).run();
     message = ADMIN_MESSAGES.approved;
   } else if (action === 'seen') {
     res = await db.prepare(

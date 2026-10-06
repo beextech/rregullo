@@ -19,6 +19,15 @@
   Cache-Control: no-cache
   X-Robots-Tag: noindex
 
+# "Thirrjet e mia" lives only in the visitor's browser; nothing to index.
+/thirrjet
+  X-Robots-Tag: noindex
+  Cache-Control: no-cache
+
+# The directory's stylesheet and script are always linked with ?v=<hash>.
+/kerko/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 

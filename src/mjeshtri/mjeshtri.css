@@ -322,3 +322,7 @@
 @media (prefers-reduced-motion: reduce) {
   .switch, .switch-knob, .toggle, .toggle::after, .meter-fill, .toast, .chip span { transition: none; }
 }
+
+/* The approved profile's public address, under the state card */
+.public-link { margin-top: 12px; color: var(--mute); font-size: 14.5px; overflow-wrap: anywhere; }
+.public-link a { color: var(--paper); text-decoration-color: rgba(171, 226, 63, .6); text-underline-offset: 3px; }

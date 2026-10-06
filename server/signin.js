@@ -40,6 +40,7 @@ export function readAppConfig(env) {
   return {
     db: env.DB,
     photos: env.PHOTOS || null,        // R2 bucket for mjeshtër photos (step 2); missing in previews
+    directoryOpen: env.DIRECTORY_OPEN === '1',   // the public directory (step 4) is open to everyone
     siteUrl,
     local,
     appSecret: env.APP_SECRET || '',
@@ -234,7 +235,7 @@ export async function currentPro(cfg, request, now) {
   const token = readCookie(request, SESSION_COOKIE);
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
   return cfg.db.prepare(
-    `SELECT p.id, p.phone, p.name, p.status FROM sessions s JOIN pros p ON p.id = s.subject
+    `SELECT p.id, p.phone, p.name, p.status, p.handle FROM sessions s JOIN pros p ON p.id = s.subject
      WHERE s.token_hash = ?1 AND s.kind = 'pro' AND s.expires_at > ?2`,
   ).bind(await sha256(token), now).first();
 }

@@ -113,7 +113,7 @@
 .calls-when { color: var(--mute); font-size: 14px; white-space: nowrap; }
 .calls-remove { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--mute); font: inherit; font-size: 14.5px; cursor: pointer; }
 .calls-remove:hover { color: var(--paper); background: rgba(241, 242, 239, .06); }
-.calls-clear { margin-top: 24px; }
+.calls-clear { margin-top: 24px; border: 0; font: inherit; font-weight: 600; cursor: pointer; }
 .calls-empty { margin-top: 24px; }
 
 .dir-foot { max-width: calc(760px + 2 * var(--gutter)); margin: 0 auto; padding: 24px var(--gutter) max(32px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--mute); font-size: 14px; }

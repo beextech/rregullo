@@ -99,7 +99,7 @@ for (const form of document.querySelectorAll('form[data-find]')) {
 
 // The page's own link in the header.
 for (const a of document.querySelectorAll('.dir-nav a')) {
-  if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page');
+  if (a.getAttribute('href') === (location.pathname.replace(/\/+$/, '') || '/')) a.setAttribute('aria-current', 'page');
 }
 
 // ---------- /thirrjet ----------

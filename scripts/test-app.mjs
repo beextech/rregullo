@@ -312,6 +312,10 @@ async function main() {
       assert(row.name === '' && row.available === 1, 'something changed');
     });
     await check('23. saving the profile: text cleaned, lists de-duplicated, numbers parsed; the answer is what was saved', async () => {
+      // A draft can be saved step by step, half filled.
+      const half = await api('/api/mjeshtri/profili', { name: 'Arben' }, { cookie: pro });
+      assert(half.status === 200 && half.data.dashboard.profile.name === 'Arben', `half-filled draft → ${half.status}`);
+      assert(half.data.dashboard.checklist.items.filter((i) => i.required && !i.done).map((i) => i.key).join() === 'trades,towns,photo', 'checklist');
       const r = await api('/api/mjeshtri/profili', { ...FULL, name: '  Arben ​ Krasniqi‮ ', trades: ['hidraulik', 'hidraulik', 'ngrohje-klime'], years: '15', about: `${FULL.about}\n\n\n\nThirrni çdo ditë.` }, { cookie: pro });
       assert(r.status === 200 && r.data.ok && r.data.message === 'U ruajt.', JSON.stringify(r.data));
       const p = r.data.dashboard.profile;
@@ -375,6 +379,13 @@ async function main() {
         ['too small (150 px)', sized(150, 150), 'pune'], ['too large (4000 px)', sized(4000, 3000), 'pune'], ['an unknown kind', JPEG, 'tjeter']]) {
         const r = await upload(kind, bytes, { cookie: pro });
         assert(r.status === 400 && !r.data.ok, `${what} → ${r.status}`);
+      }
+      // The phone aims at exactly these edges (shorter side 200, longer side 2048), so they must stay accepted.
+      for (const [w, h] of [[199, 1000], [1000, 2049]]) assert((await upload('pune', sized(w, h), { cookie: pro })).status === 400, `${w}x${h} accepted`);
+      for (const [w, h] of [[2048, 200], [200, 2048]]) {
+        const r = await upload('pune', sized(w, h), { cookie: pro });
+        assert(r.status === 200, `${w}x${h} refused`);
+        await api('/api/mjeshtri/foto/fshi', { id: r.data.photo.id }, { cookie: pro });
       }
       const big = Buffer.concat([JPEG, Buffer.alloc(2 * 1024 * 1024)]);
       assert((await upload('pune', big, { cookie: pro })).status === 413, 'over 2 MB');
@@ -495,6 +506,8 @@ async function main() {
       sql(`DELETE FROM rate_events WHERE bucket = '${await hmac(SECRET, 'photo-upload', proId('+38344200301'))}'`);
       assert((await upload('pune', JPEG, { cookie: other })).status === 403, 'upload');
       assert((await api('/api/mjeshtri/foto/fshi', { id: '00000000-0000-4000-8000-000000000000' }, { cookie: other })).status === 403, 'delete a photo');
+      const theirs = (await me(other)).data.dashboard.photos.work.map((p) => p.id);
+      assert((await api('/api/mjeshtri/foto/renditja', { ids: theirs.reverse() }, { cookie: other })).status === 403, 'reorder');
     });
     await check('38. sign out everywhere: every session of this mjeshtër ends, nobody else\'s', async () => {
       const second = await newPro('044 200 300');
@@ -560,6 +573,52 @@ async function main() {
       } finally {
         await proxy.dispose();
       }
+    });
+    await check('40a. uploads at the same moment: the 12-photo and 60-a-day limits hold, and losing uploads leave no file', async () => {
+      // wrangler dev answers one request at a time, so this calls savePhoto directly, where the database calls interleave.
+      const { getPlatformProxy } = await import('wrangler');
+      const { savePhoto } = await import('../server/photos.js');
+      const proxy = await getPlatformProxy({ persist: false });
+      try {
+        const db = proxy.env.DB;
+        for (const f of ['0001_subscribers.sql', '0002_mjeshtrit.sql', '0003_paneli.sql']) {
+          const schema = readFileSync(join(root, 'migrations', f), 'utf8');
+          for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
+        }
+        const stored = new Set();
+        const bucket = {
+          put: async (key) => { stored.add(key); },
+          delete: async (keys) => { for (const k of [].concat(keys)) stored.delete(k); },
+        };
+        const cfg = { db, photos: bucket, appSecret: SECRET };
+        const now = Date.now();
+        await db.prepare("INSERT INTO pros (id, phone, created_at, updated_at) VALUES ('p1', '+38344900001', 0, 0), ('p2', '+38344900002', 0, 0)").run();
+        for (let i = 0; i < 11; i++) {
+          await db.prepare("INSERT INTO pro_photos (id, pro_id, kind, width, height, bytes, position, created_at) VALUES (?1, 'p1', 'work', 480, 360, 1, ?2, 0)").bind(`old-${i}`, i).run();
+        }
+        const cap = await Promise.all([1, 2, 3, 4].map(() => savePhoto(cfg, 'p1', 'work', JPEG, now)));
+        const results = cap.map((r) => r.result).sort().join();
+        assert(results === 'limit,limit,limit,ok', results);
+        assert((await db.prepare("SELECT COUNT(*) AS n FROM pro_photos WHERE pro_id = 'p1'").first()).n === 12, 'more than 12 stored');
+        assert(stored.size === 1, `${stored.size} files left in the bucket`);
+
+        const key = await hmac(SECRET, 'photo-upload', 'p2');
+        for (let i = 0; i < 59; i++) await db.prepare('INSERT INTO rate_events (bucket, at) VALUES (?1, ?2)').bind(key, now - 1000 - i).run();
+        const day = await Promise.all([1, 2, 3, 4].map(() => savePhoto(cfg, 'p2', 'work', JPEG, now)));
+        const dayResults = day.map((r) => r.result).sort().join();
+        assert(dayResults === 'ok,too_many_today,too_many_today,too_many_today', dayResults);
+      } finally {
+        await proxy.dispose();
+      }
+    });
+    await check('40b. previews (no database, no photo storage): errors, never a crash', async () => {
+      const worker = (await import('../worker/index.js')).default;
+      const env = { SITE_URL: 'https://rregullo.net', APP_SECRET: SECRET, ASSETS: { fetch: () => new Response('') } };
+      const go = (path, init) => worker.fetch(new Request(`https://rregullo.net${path}`, init), env, { waitUntil() {} });
+      assert((await go('/api/mjeshtri/une')).status === 503, 'une');
+      const up = await go('/api/mjeshtri/foto?lloji=pune', { method: 'POST', headers: { 'Content-Type': 'image/jpeg', Origin: 'https://rregullo.net' }, body: JPEG });
+      assert(up.status === 503, `upload → ${up.status}`);
+      assert((await go('/foto/00000000-0000-4000-8000-000000000000.jpg')).status === 404, 'photo');
     });
     await check('41. logs contain no phone numbers or codes', async () => {
       assert(!/\+?383\s?4\d|04\d\s?\d{3}/.test(devLog), 'a phone number appears in the logs');

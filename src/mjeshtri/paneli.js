@@ -163,6 +163,7 @@ function apply(state, { refill = false } = {}) {
   renderPreview();
   const locked = state.status === 'suspended';
   for (const el of profileForm.querySelectorAll('input, textarea, button')) el.disabled = locked;
+  renderAccount(locked);
   if (!locked) updateLimits();
   renderSaveState();
 }
@@ -538,7 +539,7 @@ function renderPreview() {
   av.classList.toggle('is-off', !dash.available);
   const towns = p.towns.map((t) => labelOf(TOWNS, t));
   $('#pp-towns').textContent = towns.length
-    ? `Punon në ${towns.length > 3 ? `${towns.slice(0, 3).join(', ')} dhe ${towns.length - 3} komuna të tjera` : towns.join(', ')}`
+    ? `Punon në ${towns.length > 3 ? `${towns.slice(0, 3).join(', ')} dhe ${towns.length === 4 ? '1 komunë tjetër' : `${towns.length - 3} komuna të tjera`}` : towns.join(', ')}`
     : 'Komunat ku punon';
   const years = p.years === '' ? null : Number(p.years);
   $('#pp-years').hidden = years === null || Number.isNaN(years);
@@ -606,6 +607,8 @@ function renderPhotos() {
   grid.hidden = tiles.length === 0;
   $('#work-count').textContent = String(work.length);
   const full = work.length + pending.length >= 12;
+  // Never disable the file picker while it has focus: focus would drop to the top of the page.
+  if ((locked || full) && document.activeElement === $('#work-input')) $('#work-title').focus();
   $('#work-input').disabled = locked || full;
   $('#work-pick').hidden = full;
   $('#work-pick').classList.toggle('is-disabled', locked);
@@ -638,7 +641,7 @@ $('#avatar-input').addEventListener('change', async (e) => {
   if (!data.ok) { status.textContent = data.message || GENERIC; return; }
   status.textContent = '';
   apply(data.dashboard);
-  toast('Foto e profilit u ruajt.');
+  toast('Fotoja e profilit u ruajt.');
 });
 
 // Work photos go up one at a time from a single queue, so picking more while some are uploading just adds to it.
@@ -648,7 +651,8 @@ $('#work-input').addEventListener('change', (e) => {
   if (!files.length) return;
   const room = 12 - dash.photos.work.length - pending.length;
   const take = files.slice(0, Math.max(0, room));
-  $('#work-status').textContent = files.length > take.length ? `U zgjodhën vetëm ${take.length} nga ${files.length}: ka vend për 12 foto.` : '';
+  const chosen = take.length === 1 ? 'U zgjodh vetëm 1' : `U zgjodhën vetëm ${take.length}`;
+  $('#work-status').textContent = files.length > take.length ? `${chosen} nga ${files.length}: mund të kesh deri në 12 foto të punëve.` : '';
   pending.push(...take.map((file) => ({ file, url: '', label: 'Në pritje…' })));
   renderPhotos();
   uploadQueue();
@@ -691,7 +695,7 @@ async function uploadQueue() {
   pumping = false;
   if (!isOpen) return;
   renderPhotos();
-  if (failed) $('#work-status').textContent = `${ok ? `U shtuan ${ok} foto. ` : ''}${failed === 1 ? 'Një foto nuk u shtua' : `${failed} foto nuk u shtuan`}: ${lastError}`;
+  if (failed) $('#work-status').textContent = `${ok ? (ok === 1 ? 'U shtua 1 foto. ' : `U shtuan ${ok} foto. `) : ''}${failed === 1 ? 'Një foto nuk u shtua' : `${failed} foto nuk u shtuan`}: ${lastError}`;
   else if (ok) toast(ok === 1 ? 'Fotoja u shtua.' : `U shtuan ${ok} foto.`);
 }
 
@@ -789,6 +793,21 @@ sheet.addEventListener('click', async (e) => {
 });
 
 // ---------- Llogaria ----------
+
+const DELETE_TEXT = {
+  normal: ['Profili, fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë. Mund të hysh prapë më vonë, por fillon nga e para.',
+    'Profili, të gjitha fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë, dhe del nga çdo telefon. Klientët nuk të gjejnë më. Kjo nuk kthehet mbrapsht.'],
+  // A suspended number stays suspended after deleting (the server keeps it), so no "fresh start" is promised.
+  suspended: ['Profili dhe fotot fshihen përgjithmonë. Numri yt mbetet i pezulluar edhe nëse hyn prapë.',
+    'Profili, të gjitha fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë, dhe del nga çdo telefon. Numri yt mbetet i pezulluar edhe nëse hyn prapë. Kjo nuk kthehet mbrapsht.'],
+};
+
+function renderAccount(suspended) {
+  const [panel, dialog] = DELETE_TEXT[suspended ? 'suspended' : 'normal'];
+  $('#delete-text').textContent = panel;
+  $('#delete-sheet-text').textContent = dialog;
+  $('#delete-pause').hidden = suspended;
+}
 
 async function signOut() {
   const { data } = await api('/api/mjeshtri/dil', {});

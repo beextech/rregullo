@@ -137,3 +137,64 @@ export function teamNotificationEmail({ event, maskedEmail, at, totals }) {
   const html = `<div style="font-family:${FONT};font-size:15px;line-height:1.6;color:#16171A;">${lines.map((l) => esc(l)).join('<br>')}<p style="color:#555;font-size:13px;">Lista e plotë mbetet vetëm në bazën e të dhënave (shih README, "Manage the list").</p></div>`;
   return { subject, html, text };
 }
+
+/**
+ * Sign-in to the team panel: a link (the token rides in the URL fragment, so it never reaches a server log) and the
+ * same sign-in as a 6-digit code, for when the link opens in another browser (a mail app's own, say).
+ * In the text version the code comes before the link.
+ */
+export function adminLinkEmail({ siteUrl, linkUrl, code, ttlMinutes }) {
+  const subject = 'Hyrja në panelin e ekipit të Rregullo';
+  const html = layout({
+    siteUrl,
+    preheader: `Lidhja dhe kodi për të hyrë në panelin e ekipit. Vlejnë ${ttlMinutes} minuta.`,
+    bodyHtml: [
+      `<h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${PAPER};">Hyrja në panelin e ekipit</h1>`,
+      p('Kliko butonin për të hyrë në panelin e ekipit të Rregullo.', 'margin-bottom:0;'),
+      button(linkUrl, 'Hyr në panel'),
+      p('Nëse lidhja hapet në një shfletues tjetër, shkruaje këtë kod në faqen ku e kërkove:'),
+      `<p style="margin:0 0 20px;font-size:32px;line-height:1.2;font-weight:700;letter-spacing:0.2em;color:${PAPER};">${esc(code)}</p>`,
+      `<p style="margin:0 0 16px;color:${MUTE};font-size:14px;">Lidhja dhe kodi vlejnë ${ttlMinutes} minuta dhe përdoren vetëm një herë. Nëse butoni nuk punon, kopjoje këtë adresë në shfletues:<br><a href="${esc(linkUrl)}" style="color:${PAPER};word-break:break-all;">${esc(linkUrl)}</a></p>`,
+    ].join('\n'),
+    footerHtml: 'Ky email u dërgua sepse dikush kërkoi të hyjë në panelin e ekipit të Rregullo me këtë adresë. Nëse nuk e ke kërkuar ti, mos bëj asgjë.',
+  });
+  const text = `Hyrja në panelin e ekipit të Rregullo
+
+Kodi: ${code}
+
+Hyr në panel: ${linkUrl}
+
+Lidhja dhe kodi vlejnë ${ttlMinutes} minuta dhe përdoren vetëm një herë. Nëse lidhja hapet në një shfletues tjetër, shkruaje kodin në faqen ku e kërkove.
+
+--
+Ky email u dërgua sepse dikush kërkoi të hyjë në panelin e ekipit të Rregullo me këtë adresë. Nëse nuk e ke kërkuar ti, mos bëj asgjë.
+`;
+  return { subject, html, text };
+}
+
+/** To the team: the approval queue has something new. No name, number or id: only the count and the panel's link. */
+export function adminQueueEmail({ siteUrl, pendingCount }) {
+  const subject = 'Një profil i ri pret shqyrtim';
+  const listUrl = `${siteUrl}/admin/#lista`;
+  const waiting = pendingCount === 1 ? '1 profil' : `${pendingCount} profile`;
+  const html = layout({
+    siteUrl,
+    preheader: `Në pritje tani: ${waiting}.`,
+    bodyHtml: [
+      `<h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${PAPER};">Një profil i ri pret shqyrtim</h1>`,
+      p(`Një mjeshtër e dërgoi profilin për aprovim. Në pritje tani: ${waiting}.`, 'margin-bottom:0;'),
+      button(listUrl, 'Hape panelin e ekipit'),
+    ].join('\n'),
+    footerHtml: 'Ky email u dërgua sepse adresa jote është në listën e ekipit të Rregullo. Të dërgojmë më së shumti një të tillë në orë.',
+  });
+  const text = `Një profil i ri pret shqyrtim
+
+Një mjeshtër e dërgoi profilin për aprovim. Në pritje tani: ${waiting}.
+
+Hape panelin e ekipit: ${listUrl}
+
+--
+Ky email u dërgua sepse adresa jote është në listën e ekipit të Rregullo. Të dërgojmë më së shumti një të tillë në orë.
+`;
+  return { subject, html, text };
+}

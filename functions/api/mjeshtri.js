@@ -14,93 +14,17 @@
 //   POST /api/mjeshtri/fshi           { confirm: 'FSHIJE' } deletes the account
 
 import { log } from '../../server/subscribers.js';
-import { PHOTO, PHOTO_MESSAGES, deletePhoto, orderPhotos, savePhoto } from '../../server/photos.js';
+import { notifyQueue } from '../../server/admin.js';
+import { crossSite, fail, json, notAllowed, readJpeg, readJson } from '../../server/http.js';
+import { PHOTO_MESSAGES, deletePhoto, orderPhotos, savePhoto } from '../../server/photos.js';
 import {
-  PROFILE_MESSAGES, deleteAccount, endAllSessions, loadDashboard, saveProfile, setAvailable, submitProfile, validateProfile,
+  PROFILE_MESSAGES, deleteAccount, endAllSessions, loadDashboard, markEdited, saveProfile, setAvailable, submitProfile,
+  validateProfile,
 } from '../../server/profile.js';
 import {
   MESSAGES, SIGNIN, currentPro, endSession, formatPhone, missingConfig, missingCoreConfig, normalisePhone, readAppConfig,
   requestCode, sessionCookie, signinMaintenance, verifyCode,
 } from '../../server/signin.js';
-
-const MAX_BODY = 8192;
-
-function json(status, data, headers = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers,
-    },
-  });
-}
-
-const fail = (status, message, extra = {}) => json(status, { ok: false, message, ...extra });
-
-function originOf(url) {
-  try { return new URL(url).origin; } catch { return null; }
-}
-
-// The whole origin, scheme included: a page on http://rregullo.net (say, on hostile Wi-Fi) is not this site.
-function crossSite(request) {
-  const origin = request.headers.get('Origin');
-  return Boolean(origin) && originOf(origin) !== new URL(request.url).origin;
-}
-
-const mediaType = (request) => (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
-
-/**
- * Reads the body, but never more than max bytes: null when it is longer. A Content-Length over the cap is refused
- * before reading; without one (chunked, some HTTP/2 clients) the reading stops as soon as the cap is passed.
- */
-async function readCapped(request, max) {
-  const declared = request.headers.get('Content-Length');
-  if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > max)) return null;
-  if (!request.body) return new Uint8Array(0);
-  const reader = request.body.getReader();
-  const chunks = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) { await reader.cancel().catch(() => {}); return null; }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.byteLength; }
-  return bytes;
-}
-
-/**
- * Same-site JSON only. A cross-site page can't send application/json without a CORS preflight, which this API
- * never answers, and a browser always sends Origin on a POST; so neither a form nor a script elsewhere can call it.
- */
-async function readJson(request) {
-  if (crossSite(request)) return { error: fail(403, MESSAGES.generic) };
-  if (mediaType(request) !== 'application/json') return { error: fail(415, MESSAGES.generic) };
-  const bytes = await readCapped(request, MAX_BODY);
-  if (!bytes) return { error: fail(413, MESSAGES.generic) };
-  try {
-    const data = JSON.parse(new TextDecoder().decode(bytes));
-    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('not an object');
-    return { data };
-  } catch {
-    return { error: fail(400, MESSAGES.generic) };
-  }
-}
-
-/** A photo upload: same-site, image/jpeg (which, like JSON, needs a preflight cross-site), at most PHOTO.maxBytes. */
-async function readJpeg(request) {
-  if (crossSite(request)) return { error: fail(403, MESSAGES.generic) };
-  if (mediaType(request) !== 'image/jpeg') {
-    return { error: fail(415, PHOTO_MESSAGES.invalid) };
-  }
-  const bytes = await readCapped(request, PHOTO.maxBytes);
-  if (!bytes) return { error: fail(413, PHOTO_MESSAGES.tooBig) };
-  if (!bytes.byteLength) return { error: fail(400, PHOTO_MESSAGES.invalid) };
-  return { bytes };
-}
 
 function setup(env, check = missingConfig) {
   const cfg = readAppConfig(env);
@@ -113,7 +37,7 @@ const SIGNED_OUT = 'Nuk je i kyçur. Hyr prapë me numrin e telefonit.';
 
 /**
  * Wraps a signed-in endpoint: checks the request (JSON by default), the settings and the session, then calls
- * handler({ cfg, pro, data | bytes, request, url, waitUntil }). Errors become a generic 500 with no details.
+ * handler({ cfg, pro, data | bytes, request, url, env, waitUntil }). Errors become a generic 500 with no details.
  */
 function signedIn(handler, { body = 'json', event } = {}) {
   return async ({ request, env, waitUntil }) => {
@@ -136,7 +60,7 @@ function signedIn(handler, { body = 'json', event } = {}) {
         input = await readJpeg(request);
         if (input.error) return input.error;
       }
-      return await handler({ cfg, pro, now, data: input.data, bytes: input.bytes, request, url: new URL(request.url), waitUntil });
+      return await handler({ cfg, pro, now, data: input.data, bytes: input.bytes, request, url: new URL(request.url), env, waitUntil });
     } catch (e) {
       log(event || 'dashboard_error', { reason: e.message });
       return fail(500, MESSAGES.generic);
@@ -152,8 +76,6 @@ async function dashboard(cfg, pro, now, extra = {}) {
 }
 
 const suspended = (pro) => pro.status === 'suspended';
-
-const notAllowed = (allow) => () => new Response('Method Not Allowed', { status: 405, headers: { Allow: allow } });
 
 export const kodi = {
   async onRequestPost({ request, env, waitUntil }) {
@@ -256,10 +178,13 @@ export const disponueshem = {
 };
 
 export const dergo = {
-  onRequestPost: signedIn(async ({ cfg, pro, now }) => {
+  onRequestPost: signedIn(async ({ cfg, pro, now, env, waitUntil }) => {
     const out = await submitProfile(cfg, pro.id, now);
     switch (out.result) {
-      case 'submitted': return dashboard(cfg, pro, now, { message: PROFILE_MESSAGES.submitted });
+      case 'submitted':
+        // The team hears that the queue has something new (at most one email an hour), after the answer.
+        waitUntil(notifyQueue(env, now).catch((e) => log('admin_queue_email_failed', { reason: e.message })));
+        return dashboard(cfg, pro, now, { message: PROFILE_MESSAGES.submitted });
       case 'pending': return dashboard(cfg, pro, now, { message: PROFILE_MESSAGES.alreadyPending });
       case 'approved': return dashboard(cfg, pro, now, { message: PROFILE_MESSAGES.alreadyApproved });
       case 'suspended': return fail(403, PROFILE_MESSAGES.suspended);
@@ -280,7 +205,9 @@ export const foto = {
     if (notReady) return notReady;
     const out = await savePhoto(cfg, pro.id, kind, bytes, now);
     switch (out.result) {
-      case 'ok': return dashboard(cfg, pro, now, { photo: out.photo });
+      case 'ok':
+        await markEdited(cfg, pro.id, now);
+        return dashboard(cfg, pro, now, { photo: out.photo });
       case 'limit': return fail(400, PHOTO_MESSAGES.limit);
       case 'too_many_today': return fail(429, PHOTO_MESSAGES.tooManyToday);
       default: return fail(400, PHOTO_MESSAGES.invalid);
@@ -296,6 +223,7 @@ export const fotoFshi = {
     if (notReady) return notReady;
     const out = await deletePhoto(cfg, pro.id, data.id);
     if (out.result !== 'ok') return fail(404, PHOTO_MESSAGES.notFound);
+    await markEdited(cfg, pro.id, now);
     return dashboard(cfg, pro, now);
   }, { event: 'photo_delete_error' }),
   onRequest: notAllowed('POST'),
@@ -306,6 +234,7 @@ export const fotoRenditja = {
     if (suspended(pro)) return fail(403, PROFILE_MESSAGES.suspended);
     const out = await orderPhotos(cfg, pro.id, data.ids);
     if (out.result !== 'ok') return fail(400, PHOTO_MESSAGES.orderInvalid);
+    await markEdited(cfg, pro.id, now);
     return dashboard(cfg, pro, now);
   }, { event: 'photo_order_error' }),
   onRequest: notAllowed('POST'),

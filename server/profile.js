@@ -201,10 +201,18 @@ export async function loadDashboard(cfg, proId, now) {
 export async function saveProfile(cfg, proId, profile, now) {
   await cfg.db.prepare(
     `UPDATE pros SET name = ?2, about = ?3, trades = ?4, towns = ?5, years = ?6, price_note = ?7, whatsapp = ?8, viber = ?9,
-       updated_at = ?10 WHERE id = ?1`,
+       updated_at = ?10, edited_at = ?10 WHERE id = ?1`,
   ).bind(proId, profile.name, profile.about, JSON.stringify(profile.trades), JSON.stringify(profile.towns), profile.years,
     profile.priceNote, profile.whatsapp ? 1 : 0, profile.viber ? 1 : 0, now).run();
   log('profile_saved');
+}
+
+/**
+ * Notes that the profile's photos changed (saveProfile notes its own changes), so the team can see an approved
+ * profile changed after they looked at it. The "taking work now" switch is not an edit.
+ */
+export async function markEdited(cfg, proId, now) {
+  await cfg.db.prepare('UPDATE pros SET edited_at = ?2, updated_at = ?2 WHERE id = ?1').bind(proId, now).run();
 }
 
 export async function setAvailable(cfg, proId, available, now) {

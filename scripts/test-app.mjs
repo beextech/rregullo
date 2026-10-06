@@ -1,10 +1,10 @@
-// End-to-end test of the mjeshtër sign-in (step 1) and dashboard (step 2) against the real Worker, a local D1 database
-// and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS) and Cloudflare Turnstile.
-// Nothing is sent or stored anywhere else.
+// End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2) and the team admin (step 3) against the real
+// Worker, a local D1 database and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS), Resend
+// (email) and Cloudflare Turnstile. Nothing is sent or stored anywhere else.
 //   npm run test:app      (npm test runs it after the signup tests)
 
 import { spawn, execFileSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hmac } from '../server/crypto.js';
@@ -18,6 +18,7 @@ const MOCK = `http://127.0.0.1:${MOCK_PORT}`;
 const SECRET = 'test-secret-0123456789abcdefghijklmnopqrstuvwxyz';
 const STATE = join(root, '.wrangler', 'test-app');
 const wrangler = join(root, 'node_modules', '.bin', 'wrangler');
+const TEAM = ['ekipi1@rregullo.test', 'ekipi2@rregullo.test', 'ekipi3@rregullo.test', 'ekipi4@rregullo.test'];
 
 let passed = 0;
 const failures = [];
@@ -33,15 +34,25 @@ function sql(command) {
   return JSON.parse(out)[0].results;
 }
 
+/** Every migration, in order, on a fresh database (getPlatformProxy's, for the checks that call handlers directly). */
+async function applyMigrations(db) {
+  for (const f of readdirSync(join(root, 'migrations')).filter((x) => x.endsWith('.sql')).sort()) {
+    const schema = readFileSync(join(root, 'migrations', f), 'utf8');
+    for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
+  }
+}
+
 let ipCounter = 1;
 const freshIp = () => `203.0.113.${ipCounter++}`;
 
 // wrangler's dev server sometimes drops a kept-alive socket after a response that scheduled background work;
-// browsers retry that transparently, so the test does too (once, and only on a socket error).
+// browsers retry that transparently, so the test does too (only on a socket error). Several idle sockets in the
+// pool can be dead at once, so it tries up to three more times.
 async function request(url, init) {
-  try { return await fetch(url, init); } catch (e) {
-    if (e.cause && e.cause.code === 'UND_ERR_SOCKET') return fetch(url, init);
-    throw e;
+  for (let attempt = 0; ; attempt++) {
+    try { return await fetch(url, init); } catch (e) {
+      if (!(e.cause && e.cause.code === 'UND_ERR_SOCKET') || attempt === 3) throw e;
+    }
   }
 }
 
@@ -74,7 +85,8 @@ async function main() {
   const dev = spawn(wrangler, ['dev', '--port', String(PORT), '--persist-to', STATE,
     '--var', `APP_SECRET:${SECRET}`, '--var', `SITE_URL:${BASE}`,
     '--var', 'TWILIO_ACCOUNT_SID:ACtest', '--var', 'TWILIO_AUTH_TOKEN:test-token', '--var', `SMS_API_BASE:${MOCK}`,
-    '--var', 'TURNSTILE_SECRET_KEY:test-turnstile', '--var', `TURNSTILE_VERIFY_URL:${MOCK}/turnstile/v0/siteverify`],
+    '--var', 'TURNSTILE_SECRET_KEY:test-turnstile', '--var', `TURNSTILE_VERIFY_URL:${MOCK}/turnstile/v0/siteverify`,
+    '--var', `ADMIN_EMAILS:${TEAM.join(',')}`, '--var', 'RESEND_API_KEY:re_test', '--var', `EMAIL_API_BASE:${MOCK}`],
   { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_PROXY: '127.0.0.1,localhost', SITE_URL: BASE, TURNSTILE_SITE_KEY: '1x00000000000000000000AA' } });
   let devLog = '';
   dev.stdout.on('data', (d) => { devLog += d; });
@@ -83,6 +95,8 @@ async function main() {
     try { if ((await fetch(`${BASE}/`)).ok) break; } catch { /* starting */ }
     await new Promise((r) => setTimeout(r, 1000));
   }
+  // What wrangler prints while starting (the variables above among it) is not the Worker's logging.
+  const logStart = devLog.length;
   const lastCode = (to) => {
     const m = [...sms].reverse().find((x) => x.To === to);
     return m && (m.Body.match(/^(\d{6}) /) || [])[1];
@@ -555,10 +569,7 @@ async function main() {
       const proxy = await getPlatformProxy({ persist: false });
       try {
         const db = proxy.env.DB;
-        for (const f of ['0001_subscribers.sql', '0002_mjeshtrit.sql', '0003_paneli.sql']) {
-          const schema = readFileSync(join(root, 'migrations', f), 'utf8');
-          for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
-        }
+        await applyMigrations(db);
         const live = { DB: db, SITE_URL: 'https://rregullo.net', APP_SECRET: SECRET };
         const call = (mod, env, body) => mod.onRequestPost({ env, waitUntil() {}, request: new Request(`https://rregullo.net/api/mjeshtri/${mod === kodi ? 'kodi' : 'hyr'}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://rregullo.net', 'CF-Connecting-IP': freshIp() }, body: JSON.stringify(body),
@@ -581,10 +592,7 @@ async function main() {
       const proxy = await getPlatformProxy({ persist: false });
       try {
         const db = proxy.env.DB;
-        for (const f of ['0001_subscribers.sql', '0002_mjeshtrit.sql', '0003_paneli.sql']) {
-          const schema = readFileSync(join(root, 'migrations', f), 'utf8');
-          for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
-        }
+        await applyMigrations(db);
         const stored = new Set();
         const bucket = {
           put: async (key) => { stored.add(key); },
@@ -629,6 +637,727 @@ async function main() {
         const code = (m.Body.match(/^(\d{6}) /) || [])[1];
         assert(!new RegExp(`(?<!\\d)${code}(?!\\d)`).test(scanned), 'a code appears in the logs');
       }
+    });
+
+    // ---------- step 3: the team admin ----------
+    const LINK_SUBJECT = 'Hyrja në panelin e ekipit të Rregullo';
+    const QUEUE_SUBJECT = 'Një profil i ri pret shqyrtim';
+    const team = (path, body, opts) => api(`/api/admin/${path}`, body, opts);
+    const linksTo = (addr) => mock.messages.filter((m) => m.subject === LINK_SUBJECT && m.to.includes(addr));
+    const tokenOf = (m) => (m.text.match(/\/admin\/#hyr=([A-Za-z0-9_-]{43})/) || [])[1];
+    const codeOf = (m) => (m.text.match(/\b(\d{6})\b/) || [])[1];
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Links are emailed after the answer has gone out, so the mock is polled.
+    async function until(cond, what, ms = 8000) {
+      for (let t = 0; t < ms; t += 100) { if (cond()) return; await pause(100); }
+      throw new Error(`timed out waiting for ${what}`);
+    }
+    // A new link for a team address. Its earlier links stop counting towards the 3-per-15-minutes cap (they still work).
+    async function newLink(addr) {
+      sql(`UPDATE admin_links SET created_at = created_at - 900001 WHERE email = '${addr}'`);
+      const before = linksTo(addr).length;
+      const r = await team('lidhja', { email: addr });
+      assert(r.status === 200, `link for ${addr} → ${r.status}`);
+      await until(() => linksTo(addr).length > before, `the link email to ${addr}`);
+      const m = linksTo(addr).at(-1);
+      return { token: tokenOf(m), code: codeOf(m) };
+    }
+    const sameAnswer = (a, b) => a.status === b.status && JSON.stringify(a.data) === JSON.stringify(b.data);
+    const teamUpload = (id, kind, bytes, { cookie: c = '', origin = BASE, type = 'image/jpeg' } = {}) => request(`${BASE}/api/admin/foto?id=${encodeURIComponent(id)}&lloji=${kind}`, {
+      method: 'POST', headers: { 'Content-Type': type, Origin: origin, ...(c ? { Cookie: c } : {}) }, body: bytes,
+    }).then(async (res) => ({ status: res.status, data: await res.json().catch(() => null) }));
+    const ascii160 = (body) => {
+      const live = body.replace(BASE, 'https://rregullo.net');
+      return /^[\x20-\x7e]+$/.test(live) && live.length <= 160 && live.endsWith('https://rregullo.net/mjeshtri');
+    };
+
+    console.log('Team admin: the page and signing in');
+    await check('42. /admin/ serves the team page: its own security policy without the bot check, never indexed; robots.txt keeps out', async () => {
+      const res = await fetch(`${BASE}/admin/`);
+      const html = await res.text();
+      assert(res.status === 200 && html.includes('<meta name="robots" content="noindex'), `status ${res.status}`);
+      assert(!/\{\{\w+\}\}|<!-- @/.test(html), 'template markers left');
+      const csp = res.headers.get('Content-Security-Policy') || '';
+      assert(/script-src 'self';/.test(csp) && !csp.includes('challenges.cloudflare.com') && csp.includes("frame-ancestors 'none'") && !csp.includes(','), `CSP: ${csp}`);
+      assert(/img-src 'self' data: blob:;/.test(csp) && csp.includes("connect-src 'self'"), `CSP: ${csp}`);
+      assert(/noindex/.test(res.headers.get('X-Robots-Tag') || ''), 'X-Robots-Tag');
+      assert(/no-cache/.test(res.headers.get('Cache-Control') || ''), `Cache-Control: ${res.headers.get('Cache-Control')}`);
+      const assets = [...html.matchAll(/(?:src|href)="(\/(?:admin|mjeshtri)\/[^"?]+)\?v=[0-9a-f]+"/g)].map((m) => m[1]);
+      assert(assets.includes('/admin/admin.js') && assets.includes('/admin/admin.css'), assets.join());
+      for (const a of assets) assert((await fetch(`${BASE}${a}`)).status === 200, `${a} not served`);
+      const robots = await (await fetch(`${BASE}/robots.txt`)).text();
+      assert(robots.includes('Disallow: /admin/'), robots);
+    });
+    await check('43. asking for a link: the same answer for a team address, an unknown one and one over its limit; only the team gets an email', async () => {
+      const before = mock.messages.length;
+      const allowed = await team('lidhja', { email: TEAM[0] });
+      const unknown = await team('lidhja', { email: 'askush@rregullo.test' });
+      const shouted = await team('lidhja', { email: '  EKIPI2@Rregullo.TEST ' });
+      assert(allowed.status === 200 && allowed.data.ok && allowed.data.message.includes('15 minuta'), JSON.stringify(allowed.data));
+      assert(sameAnswer(allowed, unknown) && sameAnswer(allowed, shouted), JSON.stringify([unknown.data, shouted.data]));
+      await until(() => linksTo(TEAM[0]).length === 1 && linksTo(TEAM[1]).length === 1, 'the two link emails');
+      await pause(1000);
+      assert(mock.messages.length === before + 2, `${mock.messages.length - before} emails`);
+      assert(!mock.messages.some((m) => m.to.includes('askush@rregullo.test')), 'an unknown address got an email');
+      const m = linksTo(TEAM[0])[0];
+      const token = tokenOf(m);
+      const code = codeOf(m);
+      assert(token && code, m.text);
+      assert(m.text.includes(`Kodi: ${code}`) && m.text.includes(`${BASE}/admin/#hyr=${token}`) && m.html.includes(`${BASE}/admin/#hyr=${token}`) && m.html.includes(code), 'link or code missing');
+      assert(m.text.includes('Nëse nuk e ke kërkuar ti, mos bëj asgjë.'), 'footer');
+      const rows = sql('SELECT email, token_hash, code_hash, attempts, expires_at - created_at AS ttl, used_at FROM admin_links ORDER BY email');
+      assert(rows.map((r) => r.email).join() === TEAM.slice(0, 2).join(), JSON.stringify(rows));
+      assert(rows.every((r) => r.ttl === 15 * 60 * 1000 && r.attempts === 0 && r.used_at === null), JSON.stringify(rows));
+      assert(!JSON.stringify(rows).includes(token) && !rows.some((r) => r.code_hash.includes(code)), 'stored in the clear');
+      // Three links per address per 15 minutes; the fourth gets the same answer and no email.
+      for (let i = 0; i < 2; i++) assert((await team('lidhja', { email: TEAM[0] })).status === 200, `link ${i + 2}`);
+      await until(() => linksTo(TEAM[0]).length === 3, 'three links');
+      const capped = await team('lidhja', { email: TEAM[0] });
+      assert(sameAnswer(allowed, capped), JSON.stringify(capped.data));
+      await pause(1500);
+      assert(linksTo(TEAM[0]).length === 3, 'a fourth link went out');
+    });
+    await check('44. asking for a link: a malformed address, another site, a form post or a GET is refused', async () => {
+      for (const email of ['', 'ekipi1', 'ekipi1@', '@rregullo.test', 'ekipi1@rregullo', 'a b@rregullo.test', `${'a'.repeat(250)}@rregullo.test`, 42, null]) {
+        const r = await team('lidhja', { email });
+        assert(r.status === 400 && r.data.field === 'email', `${JSON.stringify(email)} → ${r.status}`);
+      }
+      assert((await team('lidhja', {})).data.field === 'email', 'no address');
+      assert((await team('lidhja', { email: TEAM[0] }, { origin: 'https://evil.example' })).status === 403, 'cross-site');
+      assert((await team('lidhja', `email=${TEAM[0]}`, { type: 'application/x-www-form-urlencoded' })).status === 415, 'form post');
+      assert((await team('lidhja', { email: TEAM[0], pad: 'x'.repeat(9000) })).status === 413, 'oversized');
+      assert((await fetch(`${BASE}/api/admin/lidhja`)).status === 405, 'GET');
+      assert((await fetch(`${BASE}/api/admin/hyr`)).status === 405, 'GET hyr');
+      assert((await team('hyr', { token: 'x' }, { origin: 'https://evil.example' })).status === 403, 'hyr cross-site');
+      await pause(1000);
+      assert(linksTo(TEAM[0]).length === 3, 'an email went out');
+    });
+    await check('45. at most 5 links per network per 10 minutes and 20 a day: the only answer that differs, whatever the address', async () => {
+      const ip = freshIp();
+      const codes = [];
+      for (let i = 0; i < 5; i++) codes.push((await team('lidhja', { email: `askush${i}@rregullo.test` }, { ip })).status);
+      const sixth = await team('lidhja', { email: TEAM[2] }, { ip });
+      assert(codes.every((c) => c === 200) && sixth.status === 429 && sixth.data.message.includes('shumë'), `${codes.join()},${sixth.status}`);
+      assert((await team('lidhja', { email: 'askush@rregullo.test' })).status === 200, 'another network refused');
+      const daily = freshIp();
+      const bucket = await hmac(SECRET, 'admin-ip', `${daily}|${Math.floor(Date.now() / 86400000)}`);
+      const old = Date.now() - 11 * 60 * 1000;
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 20 }, (_, i) => `('${bucket}', ${old - i * 1000})`).join(', ')}`);
+      assert((await team('lidhja', { email: TEAM[2] }, { ip: daily })).status === 429, '21st of the day');
+      await pause(1000);
+      assert(linksTo(TEAM[2]).length === 0, 'a refused request sent a link');
+    });
+    let ekipi1 = '';
+    await check('46. the link signs in once: an HttpOnly, SameSite=Strict cookie for 7 days; the same link again is refused', async () => {
+      const m = linksTo(TEAM[0]).at(-1);
+      const r = await team('hyr', { token: tokenOf(m) });
+      assert(r.status === 200 && r.data.ok, JSON.stringify(r.data));
+      assert(/^rr_ekipi=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; SameSite=Strict; Max-Age=604800$/.test(r.setCookie), r.setCookie);
+      ekipi1 = cookieOf(r.setCookie);
+      const rows = sql("SELECT subject, expires_at - created_at AS ttl FROM sessions WHERE kind = 'admin'");
+      assert(rows.length === 1 && rows[0].subject === TEAM[0] && rows[0].ttl === 7 * 86400000, JSON.stringify(rows));
+      assert(!JSON.stringify(sql('SELECT token_hash FROM sessions')).includes(ekipi1.split('=')[1]), 'raw token stored');
+      const again = await team('hyr', { token: tokenOf(m) });
+      assert(again.status === 400 && again.data.expired && !again.setCookie, JSON.stringify(again.data));
+      // The code from the used link doesn't open it either.
+      const viaCode = await team('hyr', { email: TEAM[0], code: codeOf(m) });
+      assert(viaCode.status === 400 && viaCode.data.field === 'code' && !viaCode.setCookie, JSON.stringify(viaCode.data));
+      for (const token of ['', 'x', 'A'.repeat(43), `${tokenOf(m)}x`, 42, null]) {
+        const bad = await team('hyr', { token });
+        assert(bad.status === 400 && bad.data.expired, `${JSON.stringify(token)} → ${bad.status}`);
+      }
+      const who = await team('une', undefined, { cookie: ekipi1 });
+      assert(who.status === 200 && who.data.email === TEAM[0] && who.data.smsEnabled === true && who.data.photosEnabled === true, JSON.stringify(who.data));
+      assert((await team('une')).status === 401, 'no cookie');
+      assert((await team('une', undefined, { cookie: `rr_ekipi=${'A'.repeat(43)}` })).status === 401, 'made-up cookie');
+    });
+    await check('47. a link older than 15 minutes: neither its token nor its code signs in', async () => {
+      const { token, code } = await newLink(TEAM[2]);
+      sql(`UPDATE admin_links SET expires_at = ${Date.now() - 1} WHERE email = '${TEAM[2]}'`);
+      const r = await team('hyr', { token });
+      assert(r.status === 400 && r.data.expired && !r.setCookie, JSON.stringify(r.data));
+      const c = await team('hyr', { email: TEAM[2], code });
+      assert(c.status === 400 && c.data.field === 'code' && !c.setCookie, JSON.stringify(c.data));
+    });
+    let ekipi2 = '';
+    await check("48. the code signs in instead of the link and uses it up; five wrong tries end that link's code", async () => {
+      const { token, code } = await newLink(TEAM[1]);
+      const wrong = code === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 4; i++) {
+        const r = await team('hyr', { email: TEAM[1], code: wrong });
+        assert(r.status === 400 && r.data.field === 'code' && r.data.message === 'Kodi nuk është i saktë.' && !r.setCookie, `try ${i + 1}: ${JSON.stringify(r.data)}`);
+      }
+      // The fifth try, typed with spaces and capitals, is the right one.
+      const r = await team('hyr', { email: ' Ekipi2@Rregullo.test ', code: `${code.slice(0, 3)} ${code.slice(3)}` });
+      assert(r.status === 200 && /^rr_ekipi=[A-Za-z0-9_-]{43};/.test(r.setCookie), JSON.stringify(r.data));
+      ekipi2 = cookieOf(r.setCookie);
+      assert((await team('une', undefined, { cookie: ekipi2 })).data.email === TEAM[1], 'signed in as someone else');
+      assert((await team('hyr', { token })).data.expired, 'the link still works after its code was used');
+      assert((await team('hyr', { email: TEAM[1], code })).status === 400, 'the code worked twice');
+
+      const other = await newLink(TEAM[3]);
+      const wrong4 = other.code === '000000' ? '111111' : '000000';
+      for (let i = 0; i < 5; i++) assert((await team('hyr', { email: TEAM[3], code: wrong4 })).status === 400, `try ${i + 1}`);
+      const late = await team('hyr', { email: TEAM[3], code: other.code });
+      assert(late.status === 400 && late.data.field === 'code' && !late.setCookie, 'the right code worked after five wrong ones');
+      assert(sql(`SELECT attempts FROM admin_links WHERE email = '${TEAM[3]}'`)[0].attempts === 5, 'attempts');
+      // An address outside the team, and codes that aren't 6 digits: the same answer as a wrong code.
+      const refused = late.data;
+      for (const [email, c] of [['askush@rregullo.test', '123456'], [TEAM[3], '12345'], [TEAM[3], 'abcdef'], [TEAM[3], ''], [TEAM[3], 1234567]]) {
+        const x = await team('hyr', { email, code: c });
+        assert(x.status === 400 && JSON.stringify(x.data) === JSON.stringify(refused), `${email} ${c} → ${x.status} ${JSON.stringify(x.data)}`);
+      }
+      assert((await team('hyr', { email: 'ekipi', code: '123456' })).data.field === 'email', 'malformed address');
+    });
+    let ekipi3 = '';
+    await check('49. 20 code tries per address a day: after that even the right code is refused, while the link still works', async () => {
+      const { token, code } = await newLink(TEAM[2]);
+      const bucket = await hmac(SECRET, 'admin-code-tries', TEAM[2]);
+      const now = Date.now();
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 20 }, (_, i) => `('${bucket}', ${now - 1000 - i})`).join(', ')}`);
+      const r = await team('hyr', { email: TEAM[2], code });
+      assert(r.status === 400 && r.data.field === 'code' && !r.setCookie, JSON.stringify(r.data));
+      const viaLink = await team('hyr', { token });
+      assert(viaLink.status === 200, `link → ${viaLink.status}`);
+      ekipi3 = cookieOf(viaLink.setCookie);
+    });
+
+    console.log('Team admin: sessions');
+    let arben = '';
+    await check("50. the two cookies never cross: a mjeshtër's session can't use the team API, a team session can't use the mjeshtër's", async () => {
+      arben = await newPro('044 400 500');
+      const proToken = arben.split('=')[1];
+      const teamToken = ekipi1.split('=')[1];
+      for (const c of [arben, `rr_ekipi=${proToken}`]) {
+        const r = await team('une', undefined, { cookie: c });
+        assert(r.status === 401 && r.data.signedOut, `${c.split('=')[0]} → ${r.status}`);
+        assert((await team('mjeshtrit', { status: 'all' }, { cookie: c })).status === 401, 'list');
+        assert((await team('shto', { phone: '044 400 777', consent: true }, { cookie: c })).status === 401, 'add');
+      }
+      for (const c of [ekipi1, `rr_mjeshtri=${teamToken}`]) {
+        const r = await me(c);
+        assert(r.status === 401 && r.data.signedOut, `${c.split('=')[0]} on the mjeshtër API → ${r.status}`);
+        assert((await api('/api/mjeshtri/profili', FULL, { cookie: c })).status === 401, 'mjeshtër profile');
+      }
+      assert(sql("SELECT COUNT(*) AS n FROM pros WHERE phone = '+38344400777'")[0].n === 0, 'added anyway');
+    });
+    await check('51. every team action needs a session, comes from this site, and uses the right method', async () => {
+      const posts = [['mjeshtrit', { status: 'all' }], ['vendim', { id: 'x', action: 'verify' }], ['profili', { id: 'x', ...FULL }], ['foto/fshi', { id: 'x', photoId: 'y' }],
+        ['shto', { phone: '044 400 777', consent: true }], ['fshi', { id: 'x', confirm: 'FSHIJE' }]];
+      for (const [path, body] of posts) {
+        const r = await team(path, body);
+        assert(r.status === 401 && r.data.signedOut, `${path} without a session → ${r.status}`);
+        assert((await team(path, body, { cookie: ekipi1, origin: 'https://evil.example' })).status === 403, `${path} cross-site`);
+        assert((await team(path, JSON.stringify(body), { cookie: ekipi1, type: 'text/plain' })).status === 415, `${path} as text/plain`);
+        assert((await request(`${BASE}/api/admin/${path}`, { headers: { Cookie: ekipi1 } })).status === 405, `${path} GET`);
+      }
+      for (const path of ['une', 'mjeshtri?id=x']) {
+        const r = await team(path);
+        assert(r.status === 401 && r.data.signedOut, `${path} without a session → ${r.status}`);
+        assert((await team(path, {}, { cookie: ekipi1 })).status === 405, `POST ${path}`);
+      }
+      assert((await fetch(`${BASE}/api/admin/dil`)).status === 405, 'GET dil');
+      assert((await teamUpload('x', 'pune', JPEG)).status === 401, 'upload without a session');
+      assert((await teamUpload('x', 'pune', JPEG, { cookie: ekipi1, origin: 'https://evil.example' })).status === 403, 'upload cross-site');
+      assert((await teamUpload('x', 'pune', JPEG, { cookie: ekipi1, type: 'multipart/form-data; boundary=x' })).status === 415, 'upload as a form');
+      // A page on http://<this host> is another origin; wrangler dev rewrites Origin, so the handlers are called directly.
+      const admin = await import('../functions/api/admin.js');
+      for (const [name, path, init] of [['lidhja', 'lidhja', { body: '{}' }], ['hyr', 'hyr', { body: '{}' }], ['dil', 'dil', { body: '{}' }],
+        ['vendim', 'vendim', { body: '{}' }], ['shto', 'shto', { body: '{}' }], ['foto', 'foto?id=x&lloji=pune', { body: JPEG, type: 'image/jpeg' }]]) {
+        const res = await admin[name].onRequestPost({
+          request: new Request(`https://rregullo.net/api/admin/${path}`, { method: 'POST', headers: { Origin: 'http://rregullo.net', 'Content-Type': init.type || 'application/json' }, body: init.body }),
+          env: {}, waitUntil() {},
+        });
+        assert(res.status === 403, `${name} from http → ${res.status}`);
+      }
+      assert(sql("SELECT COUNT(*) AS n FROM pros WHERE phone = '+38344400777'")[0].n === 0, 'added anyway');
+    });
+    await check('52. signing out: cookie cleared, session deleted, the old cookie no longer works, other sessions stay', async () => {
+      const { token } = await newLink(TEAM[0]);
+      const extra = cookieOf((await team('hyr', { token })).setCookie);
+      assert((await team('une', undefined, { cookie: extra })).status === 200, 'not signed in');
+      const r = await team('dil', {}, { cookie: extra });
+      assert(r.status === 200 && /^rr_ekipi=;/.test(r.setCookie) && /Max-Age=0/.test(r.setCookie) && /SameSite=Strict/.test(r.setCookie), r.setCookie);
+      assert((await team('une', undefined, { cookie: extra })).status === 401, 'still signed in');
+      assert((await team('une', undefined, { cookie: ekipi1 })).status === 200, 'another session ended');
+      assert(sql(`SELECT COUNT(*) AS n FROM sessions WHERE kind = 'admin' AND subject = '${TEAM[0]}'`)[0].n === 1, 'session left');
+    });
+    await check('53. live site: Secure cookie; removing an address from ADMIN_EMAILS locks it out at once; no link without email settings; SMS off', async () => {
+      const { getPlatformProxy } = await import('wrangler');
+      const admin = await import('../functions/api/admin.js');
+      const proxy = await getPlatformProxy({ persist: false });
+      try {
+        const db = proxy.env.DB;
+        await applyMigrations(db);
+        const live = { DB: db, SITE_URL: 'https://rregullo.net', APP_SECRET: SECRET, ADMIN_EMAILS: `${TEAM[0]}, ${TEAM[3]}`, RESEND_API_KEY: 're_test', EMAIL_FROM: 'Rregullo <njoftime@rregullo.net>', EMAIL_API_BASE: MOCK };
+        const removed = { ...live, ADMIN_EMAILS: TEAM[0] };
+        const pending = [];
+        const call = (mod, env, path, { body, cookie: c = '', origin = 'https://rregullo.net' } = {}) => {
+          const post = body !== undefined;
+          return mod[post ? 'onRequestPost' : 'onRequestGet']({
+            env, waitUntil: (p) => pending.push(p),
+            request: new Request(`https://rregullo.net/api/admin/${path}`, {
+              method: post ? 'POST' : 'GET',
+              headers: { ...(post ? { 'Content-Type': 'application/json', Origin: origin } : {}), 'CF-Connecting-IP': freshIp(), ...(c ? { Cookie: c } : {}) },
+              body: post ? JSON.stringify(body) : undefined,
+            }),
+          });
+        };
+        const settle = async () => { while (pending.length) await pending.shift(); };
+        assert((await call(admin.lidhja, { ...live, RESEND_API_KEY: '' }, 'lidhja', { body: { email: TEAM[3] } })).status === 503, 'no email key');
+        const before = linksTo(TEAM[3]).length;
+        assert((await call(admin.lidhja, live, 'lidhja', { body: { email: TEAM[3] } })).status === 200, 'link');
+        await settle();
+        assert(linksTo(TEAM[3]).length === before + 1, 'no link sent');
+        const m = linksTo(TEAM[3]).at(-1);
+        assert(m.text.includes(`https://rregullo.net/admin/#hyr=${tokenOf(m)}`) && m.from === 'Rregullo <njoftime@rregullo.net>', m.text);
+        const r = await call(admin.hyr, live, 'hyr', { body: { token: tokenOf(m) } });
+        const set = r.headers.get('Set-Cookie') || '';
+        assert(r.status === 200 && /^rr_ekipi=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; Secure; SameSite=Strict; Max-Age=604800$/.test(set), set);
+        const c = cookieOf(set);
+        assert((await call(admin.une, live, 'une', { cookie: c })).status === 200, 'not signed in');
+        // The address leaves the team: its session stops working on the next request, everywhere.
+        const out = await call(admin.une, removed, 'une', { cookie: c });
+        assert(out.status === 401 && (await out.json()).signedOut, `une → ${out.status}`);
+        assert((await call(admin.mjeshtrit, removed, 'mjeshtrit', { cookie: c, body: { status: 'all' } })).status === 401, 'list');
+        assert((await call(admin.vendim, removed, 'vendim', { cookie: c, body: { id: 'x', action: 'verify' } })).status === 401, 'decision');
+        // A link sent before the removal no longer signs in, and no new one is sent.
+        assert((await call(admin.lidhja, live, 'lidhja', { body: { email: TEAM[3] } })).status === 200, 'second link');
+        await settle();
+        const m2 = linksTo(TEAM[3]).at(-1);
+        assert(m2 !== m, 'no second link');
+        const gone = await call(admin.hyr, removed, 'hyr', { body: { token: tokenOf(m2) } });
+        assert(gone.status === 400 && (await gone.json()).expired, `removed address signed in: ${gone.status}`);
+        const goneCode = await call(admin.hyr, removed, 'hyr', { body: { email: TEAM[3], code: codeOf(m2) } });
+        assert(goneCode.status === 400, `removed address signed in by code: ${goneCode.status}`);
+        const count = linksTo(TEAM[3]).length;
+        const asked = await call(admin.lidhja, removed, 'lidhja', { body: { email: TEAM[3] } });
+        assert(asked.status === 200, `removed address → ${asked.status}`);
+        await settle();
+        assert(linksTo(TEAM[3]).length === count, 'a link went to a removed address');
+        // Without the SMS settings a decision still goes through and says so.
+        await db.prepare(`INSERT INTO pros (id, phone, name, trades, towns, status, created_at, updated_at, submitted_at)
+          VALUES ('live-1', '+38344900111', 'Arta Live', '["hidraulik"]', '["prishtine"]', 'pending', 1, 1, 1)`).run();
+        const ok = await call(admin.vendim, live, 'vendim', { cookie: c, body: { id: 'live-1', action: 'approve', seenEditedAt: null } });
+        const data = await ok.json();
+        assert(ok.status === 200 && data.sms === 'off' && data.pro.status === 'approved', JSON.stringify(data));
+        // Two team members decide at the same moment (wrangler dev answers one request at a time, so decide() is
+        // called directly): one change wins, the other is told the profile moved on, and only one is recorded.
+        const { decide: decideNow, loadPro, readAdminConfig } = await import('../server/admin.js');
+        await db.prepare(`INSERT INTO pros (id, phone, name, trades, towns, status, created_at, updated_at, submitted_at)
+          VALUES ('live-2', '+38344900112', 'Besnik Live', '["hidraulik"]', '["prishtine"]', 'pending', 1, 1, 1)`).run();
+        const cfg = readAdminConfig(live);
+        const now = Date.now();
+        const seenBoth = await loadPro(cfg, 'live-2', now);
+        const race = await Promise.all([
+          decideNow(cfg, TEAM[0], seenBoth, { action: 'approve', note: '', internalNote: '', notify: false, seenEditedAt: null }, now),
+          decideNow(cfg, TEAM[3], seenBoth, { action: 'approve', note: '', internalNote: '', notify: false, seenEditedAt: null }, now),
+        ]);
+        assert(race.map((x) => x.result).sort().join() === 'ok,state', JSON.stringify(race));
+        const logged = await db.prepare("SELECT COUNT(*) AS n FROM admin_log WHERE pro_id = 'live-2'").first();
+        assert(logged.n === 1, `${logged.n} history rows`);
+      } finally {
+        await proxy.dispose();
+      }
+    });
+
+    console.log('Team admin: the lists');
+    const DAY = 86400000;
+    await check('54. the lists: counts for every filter; pending oldest first, the others last changed first; what each row carries', async () => {
+      const now = Date.now();
+      sql(`INSERT INTO pros (id, phone, name, trades, towns, status, verified, created_at, updated_at, submitted_at, approved_at, edited_at) VALUES
+        ('test-l1', '+38349111001', 'Çerkez  Shala', '["elektricist"]', '["prizren"]', 'pending', 0, ${now - 10 * DAY}, ${now - 3 * DAY}, ${now - 3 * DAY}, NULL, ${now - 3 * DAY}),
+        ('test-l2', '+38344555666', 'Agim Berisha', '["hidraulik"]', '["prishtine","peje"]', 'pending', 1, ${now - 10 * DAY}, ${now - 1000}, ${now - 5 * DAY}, NULL, NULL),
+        ('test-l3', '+38349111003', 'Driton Morina', '["hidraulik"]', '["peje"]', 'approved', 0, ${now - 20 * DAY}, ${now - 4 * DAY}, ${now - 15 * DAY}, ${now - 12 * DAY}, ${now - 13 * DAY}),
+        ('test-l4', '+38349111004', 'Blerim Hoxha', '["elektricist"]', '["prishtine"]', 'approved', 0, ${now - 20 * DAY}, ${now - 2 * DAY}, ${now - 15 * DAY}, ${now - 10 * DAY}, ${now - 2 * DAY}),
+        ('test-l5', '+38349111005', 'Gëzim Krasniqi', '["hidraulik"]', '["prizren"]', 'rejected', 0, ${now - 20 * DAY}, ${now - 6 * DAY}, ${now - 8 * DAY}, NULL, NULL)`);
+      const list = (q) => team('mjeshtrit', Object.fromEntries(new URLSearchParams(q)), { cookie: ekipi1 });
+      const all = await list('?status=all');
+      assert(all.status === 200 && all.data.truncated === false, JSON.stringify(all.data).slice(0, 200));
+      const by = Object.fromEntries(sql('SELECT status, COUNT(*) AS n FROM pros GROUP BY status').map((r) => [r.status, r.n]));
+      const changed = sql("SELECT COUNT(*) AS n FROM pros WHERE status = 'approved' AND edited_at > approved_at")[0].n;
+      const expected = { pending: by.pending || 0, approved: by.approved || 0, rejected: by.rejected || 0, suspended: by.suspended || 0, draft: by.draft || 0, changed, all: Object.values(by).reduce((a, b) => a + b, 0) };
+      assert(JSON.stringify(all.data.counts) === JSON.stringify(expected), `${JSON.stringify(all.data.counts)} vs ${JSON.stringify(expected)}`);
+      assert(all.data.items.length === expected.all, `${all.data.items.length} rows`);
+      assert(JSON.stringify((await list('')).data) === JSON.stringify(all.data), 'no filter is not "all"');
+      const desc = (items) => items.every((x, i) => i === 0 || items[i - 1].updatedAt >= x.updatedAt);
+      assert(desc(all.data.items), 'all: not last changed first');
+
+      const pending = (await list('?status=pending')).data.items;
+      assert(pending.every((x) => x.status === 'pending') && pending.length === expected.pending, 'pending');
+      assert(pending.every((x, i) => i === 0 || pending[i - 1].submittedAt <= x.submittedAt), 'pending: not oldest first');
+      assert(pending.findIndex((x) => x.id === 'test-l2') < pending.findIndex((x) => x.id === 'test-l1'), 'the longest wait is not first');
+      const row = pending.find((x) => x.id === 'test-l2');
+      assert(row.name === 'Agim Berisha' && row.phone === '+383 44 555 666' && row.verified === true && row.photo === null && row.trades.join() === 'hidraulik' && row.towns.join() === 'prishtine,peje' && row.submittedAt === now - 5 * DAY && row.editedAt === null && row.changedSinceApproval === false, JSON.stringify(row));
+
+      const approved = (await list('?status=approved')).data.items;
+      assert(approved.every((x) => x.status === 'approved') && desc(approved), 'approved');
+      assert(approved.find((x) => x.id === 'test-l4').changedSinceApproval === true && approved.find((x) => x.id === 'test-l3').changedSinceApproval === false, 'changed since approval');
+      const ch = (await list('?status=changed')).data.items;
+      assert(ch.map((x) => x.id).join() === 'test-l4', `changed: ${ch.map((x) => x.id)}`);
+      for (const status of ['rejected', 'suspended', 'draft']) {
+        const items = (await list(`?status=${status}`)).data.items;
+        assert(items.length === expected[status] && items.every((x) => x.status === status) && desc(items), status);
+      }
+      for (const bad of ['?status=deleted', '?status=', '?status=PENDING']) {
+        const r = await list(bad);
+        assert(bad === '?status=' ? r.status === 200 : (r.status === 400 && r.data.field === 'status'), `${bad} → ${r.status}`);
+      }
+    });
+    await check('55. search: the name without accents or capitals, the phone in any form; % and _ are plain characters', async () => {
+      const ids = async (q, status = 'all') => {
+        const r = await team('mjeshtrit', { status, q }, { cookie: ekipi1 });
+        assert(r.status === 200, `${q} → ${r.status}`);
+        return r.data.items.map((x) => x.id).sort().join();
+      };
+      for (const q of ['cerkez', 'ÇERKEZ', 'çerkez shala', '  Cerkez   Shala ']) assert(await ids(q) === 'test-l1', `${q} → ${await ids(q)}`);
+      assert(await ids('gezim') === 'test-l5' && await ids('GËZIM') === 'test-l5', 'ë');
+      for (const q of ['044 555 666', '+383 44 555 666', '0038344555666', '38344555666', '044555666', '555 66']) assert(await ids(q) === 'test-l2', `${q} → ${await ids(q)}`);
+      for (const q of ['%', '_', '%%', 'a_im', '44', 'zzz']) assert(await ids(q) === '', `${q} matched ${await ids(q)}`);
+      assert(await ids('a', 'pending') !== '' && !(await ids('a', 'pending')).includes('test-l5'), 'search outside the filter');
+      assert(await ids('cerkez', 'approved') === '', 'search ignores the filter');
+      // Only the first 60 characters count.
+      assert(await ids(`${'Çerkez Shala'.padEnd(60)}zzz`) === 'test-l1', 'longer than 60');
+    });
+
+    console.log('Team admin: decisions');
+    let arbenId = '';
+    const detail = async (id, c = ekipi1) => (await team(`mjeshtri?id=${encodeURIComponent(id)}`, undefined, { cookie: c })).data.pro;
+    const decide = (id, action, extra = {}, c = ekipi1) => team('vendim', { id, action, ...extra }, { cookie: c });
+    await check('56. one mjeshtër in full; approving an incomplete profile is refused with what is missing', async () => {
+      arbenId = proId('+38344400500');
+      assert((await api('/api/mjeshtri/profili', { name: 'Arben' }, { cookie: arben })).status === 200, 'save');
+      const p = await detail(arbenId);
+      assert(p.id === arbenId && p.phone === '+383 44 400 500' && p.phoneE164 === '+38344400500' && p.status === 'draft' && p.profile.name === 'Arben', JSON.stringify(p));
+      assert(p.editedAt > 0 && p.lastLoginAt > 0 && p.createdAt > 0 && p.approvedAt === null && p.changedSinceApproval === false && Array.isArray(p.log) && p.log.length === 0, JSON.stringify(p));
+      assert(p.checklist && p.photos && p.stats && p.photosEnabled === true && p.verified === false, 'shape');
+      const before = sms.length;
+      const r = await decide(arbenId, 'approve', { seenEditedAt: p.editedAt });
+      assert(r.status === 400 && r.data.missing.join() === 'trades,towns,photo', JSON.stringify(r.data));
+      assert(sql(`SELECT status FROM pros WHERE id = '${arbenId}'`)[0].status === 'draft' && sms.length === before, 'changed anyway');
+      for (const id of ['nope', "x' OR 1=1 --", '', 'a'.repeat(65)]) {
+        const res = await team(`mjeshtri?id=${encodeURIComponent(id)}`, undefined, { cookie: ekipi1 });
+        assert(res.status === 404 && res.data.message.includes('nuk u gjet'), `${id} → ${res.status}`);
+      }
+      assert((await decide('nope', 'approve', { seenEditedAt: null })).status === 404, 'unknown id');
+    });
+    let besa = '';
+    await check('57. a mjeshtër sends the profile: each team address gets one email, at most one an hour, with no name or number', async () => {
+      assert((await api('/api/mjeshtri/profili', FULL, { cookie: arben })).status === 200, 'save');
+      assert((await upload('profili', JPEG, { cookie: arben })).status === 200, 'photo');
+      const hour = Math.floor(Date.now() / 3600000);
+      // Test 33 already sent this hour's email.
+      sql(`DELETE FROM rate_events WHERE bucket = '${await hmac(SECRET, 'admin-queue', String(hour))}'`);
+      const before = mock.messages.length;
+      const r = await api('/api/mjeshtri/dergo', {}, { cookie: arben });
+      assert(r.status === 200 && r.data.dashboard.status === 'pending', JSON.stringify(r.data));
+      const queue = () => mock.messages.slice(before).filter((m) => m.subject === QUEUE_SUBJECT);
+      await until(() => queue().length >= TEAM.length, 'the team emails');
+      await pause(500);
+      const sent = queue();
+      assert(sent.length === TEAM.length && TEAM.every((a) => sent.filter((m) => m.to.includes(a)).length === 1), sent.map((m) => m.to).join());
+      const waiting = sql("SELECT COUNT(*) AS n FROM pros WHERE status = 'pending'")[0].n;
+      for (const m of sent) {
+        assert(m.text.includes(`${BASE}/admin/#lista`) && m.text.includes(`Në pritje tani: ${waiting} profile`), m.text);
+        assert(/^queue-\d+-[0-9a-f]{16}$/.test(m.idempotencyKey), m.idempotencyKey);
+        const all = `${m.subject} ${m.text} ${m.html}`;
+        for (const secret of ['Arben', 'Krasniqi', '400 500', '400500', arbenId]) assert(!all.includes(secret), `the email names the mjeshtër (${secret})`);
+      }
+      assert(new Set(sent.map((m) => m.idempotencyKey)).size === TEAM.length, 'one key for several recipients');
+      // Another mjeshtër sends a profile within the hour: no new email.
+      besa = await newPro('044 400 501');
+      assert((await api('/api/mjeshtri/profili', { ...FULL, name: 'Besa Gashi' }, { cookie: besa })).status === 200, 'save');
+      assert((await upload('profili', JPEG, { cookie: besa })).status === 200, 'photo');
+      const count = mock.messages.length;
+      assert((await api('/api/mjeshtri/dergo', {}, { cookie: besa })).data.dashboard.status === 'pending', 'send');
+      await pause(1500);
+      if (Math.floor(Date.now() / 3600000) === hour) assert(mock.messages.length === count, 'a second email within the hour');
+    });
+    await check('58. approving what the team saw: refused when the mjeshtër edited meanwhile; then approved, with one SMS', async () => {
+      const seen = (await detail(arbenId)).editedAt;
+      await pause(5);
+      assert((await api('/api/mjeshtri/profili', { ...FULL, years: 16 }, { cookie: arben })).status === 200, 'edit');
+      const before = sms.length;
+      const stale = await decide(arbenId, 'approve', { seenEditedAt: seen });
+      assert(stale.status === 409 && stale.data.reason === 'edited' && stale.data.message === 'Mjeshtri e ndryshoi profilin ndërkohë. Shikoje prapë.', JSON.stringify(stale.data).slice(0, 300));
+      assert(stale.data.pro.editedAt > seen && stale.data.pro.status === 'pending' && stale.data.pro.profile.years === 16, 'not the fresh profile');
+      for (const bad of [{}, { seenEditedAt: String(seen) }, { seenEditedAt: 1.5 }]) {
+        const r = await decide(arbenId, 'approve', bad);
+        assert(r.status === 400 && r.data.field === 'seenEditedAt', `${JSON.stringify(bad)} → ${r.status}`);
+      }
+      assert((await decide(arbenId, 'approve', { seenEditedAt: null })).status === 409, 'approved with editedAt null');
+      const ok = await decide(arbenId, 'approve', { seenEditedAt: stale.data.pro.editedAt });
+      assert(ok.status === 200 && ok.data.ok && ok.data.message === 'Profili u aprovua.' && ok.data.sms === 'sent', JSON.stringify(ok.data).slice(0, 300));
+      const p = ok.data.pro;
+      assert(p.status === 'approved' && p.approvedAt > 0 && p.statusNote === '' && p.changedSinceApproval === false, JSON.stringify(p).slice(0, 300));
+      assert(p.log.length === 1 && p.log[0].action === 'approve' && p.log[0].admin === TEAM[0] && p.log[0].note === '' && p.log[0].publicNote === '' && p.log[0].at > 0, JSON.stringify(p.log));
+      assert(sms.length === before + 1, `${sms.length - before} SMS`);
+      const text = sms.at(-1);
+      assert(text.To === '+38344400500' && text.Body === `Rregullo: Profili yt u aprovua. Klientet do te te gjejne sapo te hapet kerkimi. ${BASE}/mjeshtri`, JSON.stringify(text));
+      assert(ascii160(text.Body), `not one plain SMS: ${text.Body}`);
+      const d = (await me(arben)).data.dashboard;
+      assert(d.status === 'approved' && d.statusNote === '', JSON.stringify(d).slice(0, 200));
+    });
+    await check('59. edits after approval: still approved, shown as changed; "seen" marks them checked; the switch is not an edit', async () => {
+      const approvedAt = (await detail(arbenId)).approvedAt;
+      await pause(5);
+      assert((await api('/api/mjeshtri/profili', { ...FULL, years: 17 }, { cookie: arben })).status === 200, 'edit');
+      let p = await detail(arbenId);
+      assert(p.status === 'approved' && p.changedSinceApproval === true && p.editedAt > approvedAt, JSON.stringify(p).slice(0, 300));
+      assert((await me(arben)).data.dashboard.status === 'approved', 'the mjeshtër lost the approval');
+      const list = (await team('mjeshtrit', { status: 'changed' }, { cookie: ekipi1 })).data;
+      assert(list.items.some((x) => x.id === arbenId && x.changedSinceApproval) && list.counts.changed === list.items.length, JSON.stringify(list.counts));
+      const stale = await decide(arbenId, 'seen', { seenEditedAt: approvedAt });
+      assert(stale.status === 409 && stale.data.reason === 'edited', `stale seen → ${stale.status}`);
+      const ok = await decide(arbenId, 'seen', { seenEditedAt: p.editedAt });
+      assert(ok.status === 200 && ok.data.message === 'Ndryshimet u shënuan si të kontrolluara.' && ok.data.sms === null, JSON.stringify(ok.data).slice(0, 200));
+      p = ok.data.pro;
+      assert(p.status === 'approved' && p.changedSinceApproval === false && p.approvedAt >= p.editedAt && p.log[0].action === 'seen', JSON.stringify(p).slice(0, 300));
+      assert(!(await team('mjeshtrit', { status: 'changed' }, { cookie: ekipi1 })).data.items.some((x) => x.id === arbenId), 'still listed as changed');
+      const seenPending = await decide('test-l1', 'seen', { seenEditedAt: (await detail('test-l1')).editedAt });
+      assert(seenPending.status === 409 && seenPending.data.reason === 'state', `seen on pending → ${seenPending.status}`);
+      assert((await api('/api/mjeshtri/disponueshem', { available: false }, { cookie: arben })).status === 200, 'switch');
+      const after = await detail(arbenId);
+      assert(after.editedAt === p.editedAt && !after.changedSinceApproval, 'the switch counted as an edit');
+      await api('/api/mjeshtri/disponueshem', { available: true }, { cookie: arben });
+    });
+    await check('60. sent back for changes: needs a reason; the mjeshtër sees the reason, never the team\'s note; one SMS', async () => {
+      const before = sms.length;
+      for (const note of [undefined, '', 'ab', '  a  ', 'x'.repeat(301), 42]) {
+        const r = await decide(arbenId, 'reject', { note });
+        assert(r.status === 400 && r.data.field === 'note' && r.data.message.includes('3 deri në 300'), `${JSON.stringify(note)} → ${r.status}`);
+      }
+      const long = await decide(arbenId, 'reject', { note: 'Fotoja nuk duket.', internalNote: 'x'.repeat(301) });
+      assert(long.status === 400 && long.data.field === 'internalNote', `internal note → ${long.status}`);
+      assert(sql(`SELECT status FROM pros WHERE id = '${arbenId}'`)[0].status === 'approved', 'changed anyway');
+      const r = await decide(arbenId, 'reject', { note: '  Fotoja e profilit nuk duket qartë.  ', internalNote: 'Foli me të në telefon të hënën.' });
+      assert(r.status === 200 && r.data.message === 'Profili u kthye për ndryshime.' && r.data.sms === 'sent', JSON.stringify(r.data).slice(0, 300));
+      assert(r.data.pro.status === 'rejected' && r.data.pro.statusNote === 'Fotoja e profilit nuk duket qartë.', JSON.stringify(r.data.pro).slice(0, 300));
+      const l = r.data.pro.log[0];
+      assert(l.action === 'reject' && l.admin === TEAM[0] && l.publicNote === 'Fotoja e profilit nuk duket qartë.' && l.note === 'Foli me të në telefon të hënën.', JSON.stringify(l));
+      assert(sms.length === before + 1, `${sms.length - before} SMS`);
+      const text = sms.at(-1);
+      assert(text.To === '+38344400500' && text.Body === `Rregullo: Ekipi kerkon disa ndryshime ne profilin tend. Shiko arsyen: ${BASE}/mjeshtri` && ascii160(text.Body), JSON.stringify(text));
+      const mine = await me(arben);
+      assert(mine.data.dashboard.status === 'rejected' && mine.data.dashboard.statusNote === 'Fotoja e profilit nuk duket qartë.', JSON.stringify(mine.data.dashboard).slice(0, 200));
+      const seenByPro = JSON.stringify(mine.data);
+      assert(!seenByPro.includes('Foli me të') && !seenByPro.includes('rregullo.test'), 'the mjeshtër sees the team\'s note or address');
+      assert(sql(`SELECT status_note FROM pros WHERE id = '${arbenId}'`)[0].status_note === 'Fotoja e profilit nuk duket qartë.', 'stored note');
+    });
+    await check('61. every allowed change and every refused one; verify, suspend and lift it; no SMS but for approve and reject', async () => {
+      const before = sms.length;
+      const notNow = (r, what) => assert(r.status === 409 && r.data.reason === 'state' && r.data.pro && r.data.pro.id === arbenId && r.data.message.includes('gjendjen'), `${what} → ${r.status} ${JSON.stringify(r.data).slice(0, 120)}`);
+      const edited = async () => (await detail(arbenId)).editedAt;
+      // rejected
+      notNow(await decide(arbenId, 'reject', { note: 'Prapë.' }), 'reject when rejected');
+      notNow(await decide(arbenId, 'seen', { seenEditedAt: await edited() }), 'seen when rejected');
+      notNow(await decide(arbenId, 'unsuspend'), 'unsuspend when rejected');
+      const back = await decide(arbenId, 'approve', { seenEditedAt: await edited(), notify: false });
+      assert(back.status === 200 && back.data.pro.status === 'approved' && back.data.sms === 'skipped', JSON.stringify(back.data).slice(0, 200));
+      // approved
+      notNow(await decide(arbenId, 'approve', { seenEditedAt: await edited() }), 'approve when approved');
+      notNow(await decide(arbenId, 'unsuspend'), 'unsuspend when approved');
+      // suspended
+      const noNote = await decide(arbenId, 'suspend');
+      assert(noNote.status === 400 && noNote.data.field === 'note', `suspend without a reason → ${noNote.status}`);
+      const s = await decide(arbenId, 'suspend', { note: 'Ankesa nga klientët.', internalNote: 'Tre ankesa këtë javë.' });
+      assert(s.status === 200 && s.data.message === 'Llogaria u pezullua.' && s.data.sms === null && s.data.pro.status === 'suspended' && s.data.pro.statusNote === 'Ankesa nga klientët.', JSON.stringify(s.data).slice(0, 200));
+      const d = (await me(arben)).data.dashboard;
+      assert(d.status === 'suspended' && d.statusNote === 'Ankesa nga klientët.', JSON.stringify(d).slice(0, 200));
+      assert((await api('/api/mjeshtri/profili', FULL, { cookie: arben })).status === 403, 'a suspended mjeshtër can edit');
+      notNow(await decide(arbenId, 'suspend', { note: 'Prapë.' }), 'suspend when suspended');
+      notNow(await decide(arbenId, 'approve', { seenEditedAt: await edited() }), 'approve when suspended');
+      notNow(await decide(arbenId, 'reject', { note: 'Prapë.' }), 'reject when suspended');
+      notNow(await decide(arbenId, 'seen', { seenEditedAt: await edited() }), 'seen when suspended');
+      // Verifikuar works in any status; saying it twice changes nothing.
+      const v = await decide(arbenId, 'verify');
+      assert(v.status === 200 && v.data.message === 'U shënua si i verifikuar.' && v.data.pro.verified === true && v.data.sms === null, JSON.stringify(v.data).slice(0, 200));
+      const logged = v.data.pro.log.length;
+      const v2 = await decide(arbenId, 'verify');
+      assert(v2.status === 200 && v2.data.pro.verified === true && v2.data.pro.log.length === logged, 'verify twice');
+      const u = await decide(arbenId, 'unverify');
+      assert(u.status === 200 && u.data.message === 'Shenja Verifikuar u hoq.' && u.data.pro.verified === false, 'unverify');
+      // Lifting the suspension: back in the queue when complete, a draft when not.
+      const t0 = Date.now();
+      const un = await decide(arbenId, 'unsuspend');
+      assert(un.status === 200 && un.data.message === 'Pezullimi u hoq. Profili është në pritje të shqyrtimit.' && un.data.pro.status === 'pending' && un.data.pro.statusNote === '' && un.data.pro.submittedAt >= t0, JSON.stringify(un.data).slice(0, 300));
+      const emptyId = proId('+38344200300');
+      assert((await decide(emptyId, 'suspend', { note: 'Numër i gabuar.' })).data.pro.status === 'suspended', 'suspend a draft');
+      const unDraft = await decide(emptyId, 'unsuspend');
+      assert(unDraft.status === 200 && unDraft.data.pro.status === 'draft' && unDraft.data.message.includes('pa dërguar'), JSON.stringify(unDraft.data).slice(0, 200));
+      // Unknown actions and fields.
+      for (const action of ['delete', '', undefined, 'APPROVE']) {
+        const r = await decide(arbenId, action);
+        assert(r.status === 400 && r.data.field === 'action', `${action} → ${r.status}`);
+      }
+      assert((await decide('nope', 'delete')).status === 404, 'an unknown id is checked first');
+      const history = (await detail(arbenId)).log;
+      assert(history.map((x) => x.action).join() === 'unsuspend,unverify,verify,suspend,approve,reject,seen,approve', history.map((x) => x.action).join());
+      assert(history.every((x) => x.admin === TEAM[0]), 'admin');
+      const susp = history.find((x) => x.action === 'suspend');
+      assert(susp.publicNote === 'Ankesa nga klientët.' && susp.note === 'Tre ankesa këtë javë.', JSON.stringify(susp));
+      assert(sms.length === before, `${sms.length - before} SMS for actions that send none`);
+    });
+    await check('62. SMS caps: 3 a day per mjeshtër and 50 a day in all; the decision still goes through', async () => {
+      const before = sms.length;
+      // Arben has had two texts today (approve, reject); the third is sent, the fourth is not.
+      const a = await decide(arbenId, 'approve', { seenEditedAt: (await detail(arbenId)).editedAt });
+      assert(a.status === 200 && a.data.sms === 'sent', JSON.stringify(a.data).slice(0, 200));
+      const r = await decide(arbenId, 'reject', { note: 'Shto foto të punëve.' });
+      assert(r.status === 200 && r.data.sms === 'capped' && r.data.pro.status === 'rejected', JSON.stringify(r.data).slice(0, 200));
+      assert(sms.length === before + 1, `${sms.length - before} SMS`);
+      const all = await hmac(SECRET, 'notify-sms-all', 'all');
+      const now = Date.now();
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 50 }, (_, i) => `('${all}', ${now - 1000 - i})`).join(', ')}`);
+      const besaId = proId('+38344400501');
+      const b = await decide(besaId, 'approve', { seenEditedAt: (await detail(besaId)).editedAt });
+      assert(b.status === 200 && b.data.sms === 'capped' && b.data.pro.status === 'approved', JSON.stringify(b.data).slice(0, 200));
+      assert(sms.length === before + 1, 'sent over the daily cap');
+      sql(`DELETE FROM rate_events WHERE bucket = '${all}'`);
+    });
+
+    console.log('Team admin: adding and editing a mjeshtër');
+    let addedId = '';
+    await check('63. adding a mjeshtër: only with their OK, never twice; at most 20 a day per team member', async () => {
+      const add = (body, c = ekipi1) => team('shto', body, { cookie: c });
+      for (const consent of [undefined, false, 'true', 1]) {
+        const r = await add({ phone: '044 400 600', consent });
+        assert(r.status === 400 && r.data.field === 'consent' && r.data.message.includes('pëlqimin'), `${consent} → ${r.status}`);
+      }
+      for (const phone of ['', '12345', '+386 41 123 456']) {
+        const r = await add({ phone, consent: true });
+        assert(r.status === 400 && r.data.field === 'phone', `${phone} → ${r.status}`);
+      }
+      const exists = await add({ phone: '+383 44 400 500', consent: true });
+      assert(exists.status === 409 && exists.data.id === arbenId && exists.data.message === 'Ky numër është tashmë në Rregullo.', JSON.stringify(exists.data));
+      assert(sql("SELECT COUNT(*) AS n FROM pros WHERE phone = '+38344400600'")[0].n === 0, 'added without consent');
+      const r = await add({ phone: '044 400 600', consent: true });
+      assert(r.status === 201 && r.data.ok && r.data.id && r.data.message.includes('u shtua'), JSON.stringify(r.data));
+      addedId = r.data.id;
+      const [row] = sql(`SELECT id, status, last_login_at FROM pros WHERE phone = '+38344400600'`);
+      assert(row.id === addedId && row.status === 'draft' && row.last_login_at === null, JSON.stringify(row));
+      const p = await detail(addedId);
+      assert(p.status === 'draft' && p.lastLoginAt === null && p.phone === '+383 44 400 600', JSON.stringify(p).slice(0, 200));
+      assert(p.log.length === 1 && p.log[0].action === 'created' && p.log[0].admin === TEAM[0] && p.log[0].note === 'pëlqim i dhënë', JSON.stringify(p.log));
+      const again = await add({ phone: '+38344400600', consent: true }, ekipi2);
+      assert(again.status === 409 && again.data.id === addedId, 'added twice');
+      const bucket = await hmac(SECRET, 'admin-add', TEAM[1]);
+      const now = Date.now();
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 20 }, (_, i) => `('${bucket}', ${now - 1000 - i})`).join(', ')}`);
+      const capped = await add({ phone: '044 400 601', consent: true }, ekipi2);
+      assert(capped.status === 429 && capped.data.message.includes('nesër'), `21st → ${capped.status}`);
+      assert(sql("SELECT COUNT(*) AS n FROM pros WHERE phone = '+38344400601'")[0].n === 0, 'added over the cap');
+      assert((await add({ phone: '044 400 500', consent: true }, ekipi2)).status === 409, 'an existing number is still found over the cap');
+      assert((await add({ phone: '044 400 601', consent: true }, ekipi3)).status === 201, 'the cap is per team member');
+    });
+    await check('64. the team fills in the profile and photos of another mjeshtër; text comes back exactly as typed, never as HTML', async () => {
+      const NAME = "Valon Gashi & Djemtë's";
+      const ABOUT = 'Punoj <b>pllaka</b> dhe banjo <script>alert(1)</script> me garanci për çdo punë që bëj, në Prishtinë.';
+      const r = await team('profili', { id: addedId, ...FULL, name: NAME, about: ABOUT }, { cookie: ekipi2 });
+      assert(r.status === 200 && r.data.message === 'U ruajt.' && r.data.pro.profile.name === NAME && r.data.pro.profile.about === ABOUT, JSON.stringify(r.data).slice(0, 300));
+      assert(r.data.pro.editedAt > 0 && r.data.pro.log[0].action === 'profile' && r.data.pro.log[0].admin === TEAM[1], JSON.stringify(r.data.pro.log));
+      const listed = (await team('mjeshtrit', { status: 'draft', q: 'valon' }, { cookie: ekipi1 })).data.items;
+      assert(listed.length === 1 && listed[0].name === NAME, JSON.stringify(listed));
+      const bad = await team('profili', { id: addedId, ...FULL, name: '<b>Valon</b>' }, { cookie: ekipi2 });
+      assert(bad.status === 400 && bad.data.errors.name, JSON.stringify(bad.data));
+      assert((await team('profili', { id: 'nope', ...FULL }, { cookie: ekipi2 })).status === 404, 'unknown id');
+      // Photos
+      const pic = await teamUpload(addedId, 'profili', JPEG, { cookie: ekipi2 });
+      assert(pic.status === 200 && pic.data.photo && pic.data.pro.photos.profile.id === pic.data.photo.id, JSON.stringify(pic.data).slice(0, 200));
+      assert((await request(`${BASE}${pic.data.photo.url}`)).status === 200, 'not served');
+      const work = await teamUpload(addedId, 'pune', JPEG, { cookie: ekipi2 });
+      assert(work.status === 200 && work.data.pro.photos.work.length === 1, `work → ${work.status}`);
+      const extra = await teamUpload(addedId, 'pune', JPEG, { cookie: ekipi2 });
+      const del = await team('foto/fshi', { id: addedId, photoId: extra.data.photo.id }, { cookie: ekipi2 });
+      assert(del.status === 200 && del.data.pro.photos.work.length === 1, `delete → ${del.status}`);
+      assert((await request(`${BASE}${extra.data.photo.url}`)).status === 404, 'deleted photo still served');
+      // Another mjeshtër's photo can't be deleted through this one, and odd requests are refused.
+      const arbensPhoto = (await detail(arbenId)).photos.profile;
+      assert((await team('foto/fshi', { id: addedId, photoId: arbensPhoto.id }, { cookie: ekipi2 })).status === 404, "deleted someone else's photo");
+      assert((await request(`${BASE}${arbensPhoto.url}`)).status === 200, "someone else's photo is gone");
+      assert((await team('foto/fshi', { id: 'nope', photoId: arbensPhoto.id }, { cookie: ekipi2 })).status === 404, 'unknown mjeshtër');
+      assert((await teamUpload(addedId, 'tjeter', JPEG, { cookie: ekipi2 })).status === 400, 'unknown kind');
+      assert((await teamUpload('nope', 'pune', JPEG, { cookie: ekipi2 })).status === 404, 'upload for an unknown id');
+      assert((await teamUpload(addedId, 'pune', Buffer.from('hello'), { cookie: ekipi2 })).status === 400, 'not a JPEG');
+      const p = await detail(addedId);
+      assert(p.log.map((x) => x.action).join() === 'photo,photo,photo,photo,profile,created', p.log.map((x) => x.action).join());
+      assert(p.log[0].note === 'U fshi një foto.' && p.log.some((x) => x.note === 'Foto e profilit u ndërrua.') && p.log.some((x) => x.note === 'U shtua një foto pune.'), JSON.stringify(p.log));
+      // Approved with an SMS to the number, then a team change shows as changed since approval.
+      const before = sms.length;
+      const ok = await decide(addedId, 'approve', { seenEditedAt: p.editedAt });
+      assert(ok.status === 200 && ok.data.sms === 'sent' && sms.length === before + 1 && sms.at(-1).To === '+38344400600', JSON.stringify(ok.data).slice(0, 200));
+      await pause(5);
+      const later = await teamUpload(addedId, 'pune', JPEG, { cookie: ekipi1 });
+      assert(later.status === 200 && later.data.pro.status === 'approved' && later.data.pro.changedSinceApproval === true && later.data.pro.editedAt > later.data.pro.approvedAt, JSON.stringify(later.data.pro).slice(0, 200));
+      const gone = await team('foto/fshi', { id: addedId, photoId: later.data.photo.id }, { cookie: ekipi1 });
+      assert(gone.status === 200 && gone.data.pro.status === 'approved' && gone.data.pro.photos.work.length === 1, 'delete after approval');
+    });
+    let valon = '';
+    await check('65. the added mjeshtër signs in by SMS with that number and finds the profile the team made', async () => {
+      valon = await newPro('044 400 600');
+      const d = (await me(valon)).data.dashboard;
+      assert(d.status === 'approved' && d.profile.name === "Valon Gashi & Djemtë's" && d.photos.profile && d.photos.work.length === 1, JSON.stringify(d).slice(0, 300));
+      assert(sql("SELECT COUNT(*) AS n FROM pros WHERE phone = '+38344400600'")[0].n === 1, 'a second account');
+      assert((await detail(addedId)).lastLoginAt > 0, 'last sign-in not shown');
+      assert(!JSON.stringify(d).includes('rregullo.test') && !JSON.stringify(d).includes('pëlqim'), 'the team history reached the mjeshtër');
+    });
+    await check('66. deleting a mjeshtër: needs the word; profile, photos (R2 too), history and sessions are gone', async () => {
+      const urls = sql(`SELECT id FROM pro_photos WHERE pro_id = '${addedId}'`).map((r) => `/foto/${r.id}.jpg`);
+      assert(urls.length === 2, `${urls.length} photos`);
+      for (const confirm of [undefined, 'fshije', 'FSHIJE ']) {
+        const r = await team('fshi', { id: addedId, confirm }, { cookie: ekipi1 });
+        assert(r.status === 400 && r.data.field === 'confirm', `${confirm} → ${r.status}`);
+      }
+      assert((await team('fshi', { id: 'nope', confirm: 'FSHIJE' }, { cookie: ekipi1 })).status === 404, 'unknown id');
+      const r = await team('fshi', { id: addedId, confirm: 'FSHIJE' }, { cookie: ekipi1 });
+      assert(r.status === 200 && r.data.kept === false && r.data.message === 'Llogaria e mjeshtrit u fshi bashkë me profilin dhe fotot.', JSON.stringify(r.data));
+      for (const [table, col] of [['pros', 'id'], ['pro_photos', 'pro_id'], ['admin_log', 'pro_id'], ['sessions', 'subject']]) {
+        assert(sql(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = '${addedId}'`)[0].n === 0, `${table} still has rows`);
+      }
+      for (const u of urls) assert((await request(`${BASE}${u}`)).status === 404, `${u} still served`);
+      assert((await me(valon)).status === 401, 'still signed in');
+      assert((await team(`mjeshtri?id=${addedId}`, undefined, { cookie: ekipi1 })).status === 404, 'still listed');
+      assert((await me(arben)).status === 200, "someone else's account is affected");
+    });
+    await check('67. deleting a suspended mjeshtër: profile and photos gone; the number stays suspended with its history', async () => {
+      const s = await decide(arbenId, 'suspend', { note: 'Numri u raportua.' });
+      assert(s.status === 200 && s.data.pro.status === 'suspended', `suspend → ${s.status}`);
+      // The team can still change a suspended profile.
+      assert((await team('profili', { id: arbenId, ...FULL, years: 18 }, { cookie: ekipi1 })).status === 200, 'team edit when suspended');
+      assert((await teamUpload(arbenId, 'pune', JPEG, { cookie: ekipi1 })).status === 200, 'team upload when suspended');
+      const urls = sql(`SELECT id FROM pro_photos WHERE pro_id = '${arbenId}'`).map((r) => `/foto/${r.id}.jpg`);
+      const logged = (await detail(arbenId)).log.length;
+      const r = await team('fshi', { id: arbenId, confirm: 'FSHIJE' }, { cookie: ekipi2 });
+      assert(r.status === 200 && r.data.kept === true && r.data.message === 'Profili dhe fotot u fshinë. Numri mbetet i pezulluar.', JSON.stringify(r.data));
+      const [row] = sql(`SELECT name, trades, status, status_note FROM pros WHERE id = '${arbenId}'`);
+      assert(row && row.name === '' && row.trades === '[]' && row.status === 'suspended' && row.status_note === 'Numri u raportua.', JSON.stringify(row));
+      assert(sql(`SELECT COUNT(*) AS n FROM pro_photos WHERE pro_id = '${arbenId}'`)[0].n === 0, 'photos left');
+      for (const u of urls) assert((await request(`${BASE}${u}`)).status === 404, `${u} still served`);
+      const p = await detail(arbenId);
+      assert(p.log.length === logged + 1 && p.log[0].action === 'deleted' && p.log[0].admin === TEAM[1], JSON.stringify(p.log.slice(0, 2)));
+      assert(p.log.some((x) => x.action === 'reject' && x.note === 'Foli me të në telefon të hënën.'), 'history lost');
+      assert((await me(arben)).status === 401, 'still signed in');
+    });
+    await check('68. logs contain no team addresses, phone numbers, tokens or codes', async () => {
+      // Photo ids and pro ids are random UUIDs, and their digits can look like a number or a code by chance: leave them out.
+      const scanned = devLog.slice(logStart).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
+      const at = (i) => JSON.stringify(scanned.slice(Math.max(0, i - 80), i + 40));
+      const email = scanned.match(/[a-z0-9.+-]+@rregullo\.test/i);
+      assert(!email, `an address appears in the logs: ${email && at(email.index)}`);
+      const phone = scanned.match(/\+?383\s?4\d|04\d\s?\d{3}/);
+      assert(!phone, `a phone number appears in the logs: ${phone && at(phone.index)}`);
+      const links = mock.messages.filter((m) => m.subject === LINK_SUBJECT);
+      assert(links.length >= 10, `${links.length} link emails`);
+      for (const m of links) {
+        assert(!scanned.includes(tokenOf(m)), 'a link token appears in the logs');
+        assert(!new RegExp(`(?<!\\d)${codeOf(m)}(?!\\d)`).test(scanned), 'a link code appears in the logs');
+      }
+      for (const c of [ekipi1, ekipi2, ekipi3]) assert(!scanned.includes(c.split('=')[1]), 'a session token appears in the logs');
+      for (const m of sms) {
+        const code = (m.Body.match(/^(\d{6}) /) || [])[1];
+        if (code) assert(!new RegExp(`(?<!\\d)${code}(?!\\d)`).test(scanned), 'an SMS code appears in the logs');
+      }
+      assert(!scanned.includes('Foli me të'), "the team's note appears in the logs");
     });
   } finally {
     dev.kill('SIGTERM');

@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paneli i ekipit | Rregullo</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#16171A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/mjeshtri/mjeshtri.css?v={{APP_CSS_HASH}}">
+<link rel="stylesheet" href="/admin/admin.css?v={{ADMIN_CSS_HASH}}">
+<script type="module" src="/admin/admin.js?v={{ADMIN_JS_HASH}}"></script>
+</head>
+<body class="pro-page admin-page">
+<a class="skip" href="#main">Kalo te përmbajtja</a>
+
+<header class="top">
+  <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
+    <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
+  </a>
+  <div class="admin-top">
+    <span class="status">Ekipi</span>
+    <button class="pro-link" type="button" id="signout" hidden>
+      <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Dil</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="pro-shell admin-shell">
+  <p class="pro-loading" data-view="loading">Po hapet…</p>
+
+  <!-- Sign-in, step 1: the team member's email -->
+  <section class="pro-card" data-view="email" hidden aria-labelledby="email-title">
+    <p class="eyebrow">Paneli i ekipit</p>
+    <h1 class="pro-title" id="email-title" tabindex="-1">Hyr me emailin e ekipit</h1>
+    <p class="pro-text">Të dërgojmë me email një lidhje dhe një kod. Hyjnë vetëm adresat e ekipit të Rregullos, dhe mbetesh i kyçur 7 ditë në këtë shfletues.</p>
+    <p class="pro-dev" id="signed-out-note" hidden></p>
+    <form class="pro-form" id="email-form" novalidate>
+      <label class="pro-label" for="email">Emaili</label>
+      <input class="field-input" id="email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off"
+        spellcheck="false" maxlength="254" required aria-describedby="email-error">
+      <p class="field-error" id="email-error" hidden></p>
+      <p class="form-error" id="email-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Më dërgo lidhjen</span>
+      </button>
+    </form>
+  </section>
+
+  <!-- Sign-in, step 2: open the link, or type the code from the email -->
+  <section class="pro-card" data-view="code" hidden aria-labelledby="code-title">
+    <p class="eyebrow">Paneli i ekipit</p>
+    <h1 class="pro-title" id="code-title" tabindex="-1">Shiko emailin</h1>
+    <p class="pro-text" id="code-sent"></p>
+    <p class="pro-text">Hape lidhjen në email, ose shkruaje kodin këtu nëse emaili hapet në një shfletues tjetër.</p>
+    <form class="pro-form" id="code-form" novalidate>
+      <label class="pro-label" for="code">Shkruaje kodin nga emaili</label>
+      <input class="field-input pro-code" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+        pattern="[0-9]*" maxlength="6" placeholder="••••••" required aria-describedby="code-hint code-error">
+      <p class="pro-hint" id="code-hint">6 shifra. Vlen 15 minuta.</p>
+      <p class="field-error" id="code-error" hidden></p>
+      <p class="form-error" id="code-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Hyr</span>
+      </button>
+    </form>
+    <p class="pro-links">
+      <button class="pro-link" type="button" data-action="change-email">Ndrysho adresën</button>
+      <button class="pro-link" type="button" data-action="resend">Dërgo emailin prapë</button>
+    </p>
+  </section>
+
+  <!-- Sign-in from the link in the email: a button, so a link scanner that opens the page doesn't use it up -->
+  <section class="pro-card" data-view="link" hidden aria-labelledby="link-title">
+    <p class="eyebrow">Paneli i ekipit</p>
+    <h1 class="pro-title" id="link-title" tabindex="-1">Hyr në panelin e ekipit</h1>
+    <p class="pro-text" id="link-text">Lidhja nga emaili është gati. Shtype butonin për të hyrë në këtë shfletues.</p>
+    <p class="form-error" id="link-error" role="alert" hidden></p>
+    <button class="btn btn-primary pro-submit" type="button" id="link-go">
+      <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Hyr në panelin e ekipit</span>
+    </button>
+    <p class="pro-links">
+      <button class="pro-link" type="button" data-action="new-link">Kërko një lidhje të re</button>
+    </p>
+  </section>
+
+  <!-- Signed in -->
+  <div class="admin-app" data-view="app" hidden>
+
+    <!-- The list -->
+    <section class="admin-section admin-list" data-page="list" hidden aria-labelledby="list-title">
+      <div class="list-head">
+        <div>
+          <p class="eyebrow">Paneli i ekipit</p>
+          <h1 class="pro-title" id="list-title" tabindex="-1">Mjeshtrit</h1>
+        </div>
+        <a class="btn btn-primary list-add" href="#shto">Shto mjeshtër</a>
+      </div>
+
+      <nav class="filters-nav" aria-label="Gjendja e profilit">
+        <ul class="filters">
+          <li><a class="filter" href="#lista/pending" data-filter="pending">Në pritje <span class="filter-count" data-count="pending"></span></a></li>
+          <li><a class="filter" href="#lista/changed" data-filter="changed">Ndryshuar pas aprovimit <span class="filter-count" data-count="changed"></span></a></li>
+          <li><a class="filter" href="#lista/approved" data-filter="approved">Aprovuar <span class="filter-count" data-count="approved"></span></a></li>
+          <li><a class="filter" href="#lista/rejected" data-filter="rejected">Kthyer për ndryshime <span class="filter-count" data-count="rejected"></span></a></li>
+          <li><a class="filter" href="#lista/suspended" data-filter="suspended">Pezulluar <span class="filter-count" data-count="suspended"></span></a></li>
+          <li><a class="filter" href="#lista/draft" data-filter="draft">Pa dërguar <span class="filter-count" data-count="draft"></span></a></li>
+          <li><a class="filter" href="#lista/all" data-filter="all">Të gjithë <span class="filter-count" data-count="all"></span></a></li>
+        </ul>
+      </nav>
+
+      <form class="list-search" id="search-form" role="search" novalidate>
+        <label class="visually-hidden" for="q">Kërko me emër ose numër telefoni</label>
+        <input class="field-input" id="q" type="search" maxlength="60" placeholder="Kërko me emër ose numër" autocomplete="off"
+          autocapitalize="off" spellcheck="false" enterkeyhint="search">
+      </form>
+
+      <p class="form-error" id="list-error" role="alert" hidden></p>
+      <ul class="rows" id="rows" aria-labelledby="list-title"></ul>
+      <p class="list-empty" id="list-empty" hidden></p>
+      <p class="pro-hint list-cap" id="list-cap" hidden>Shfaqen vetëm 200 të parët. Kërko me emër ose numër për t’i gjetur të tjerët.</p>
+      <p class="pro-hint list-me">Je kyçur si <strong id="me-email"></strong>.</p>
+    </section>
+
+    <!-- One mjeshtër -->
+    <section class="admin-section admin-detail" data-page="detail" hidden aria-labelledby="d-title">
+      <a class="back-link" href="#lista" id="d-back"><span aria-hidden="true">‹</span> Mjeshtrit</a>
+      <p class="eyebrow">Mjeshtri</p>
+      <h1 class="pro-title" id="d-title" tabindex="-1">Po hapet…</h1>
+      <p class="d-meta" id="d-meta" hidden>
+        <a class="d-phone" id="d-phone" href="#lista"></a>
+        <span class="d-login" id="d-login"></span>
+      </p>
+      <p class="form-error" id="d-load-error" role="alert" hidden></p>
+
+      <div class="detail-grid" id="d-body" hidden>
+        <section class="panel d-status" aria-labelledby="d-status-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="d-status-title" tabindex="-1">Gjendja</h2>
+            <p class="verified-mark" id="d-verified-mark" hidden>Verifikuar</p>
+          </div>
+          <div class="state-card" id="d-state" data-state="draft">
+            <p class="state-title" id="d-state-title"></p>
+            <p class="state-text" id="d-state-text"></p>
+            <p class="state-text" id="d-state-changed" hidden></p>
+            <p class="state-note" id="d-state-note" hidden><span class="state-note-label">Arsyeja që sheh mjeshtri:</span> <span id="d-state-note-text"></span></p>
+          </div>
+
+          <div class="d-missing" id="d-missing" hidden>
+            <p class="d-missing-title">Para se ta aprovosh, mungon:</p>
+            <ul class="d-missing-list" id="d-missing-list"></ul>
+          </div>
+
+          <div class="d-actions">
+            <div class="d-approve" id="d-approve-box" hidden>
+              <button class="btn btn-primary" type="button" id="d-approve" aria-describedby="d-approve-hint">
+                <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Aprovo</span>
+              </button>
+              <p class="pro-hint" id="d-approve-hint" hidden></p>
+            </div>
+            <button class="btn btn-primary" type="button" id="d-seen" hidden aria-describedby="d-approve-hint">
+              <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Shënoje si të kontrolluar</span>
+            </button>
+            <label class="consent d-notify" id="d-notify-row" hidden>
+              <input class="consent-box" type="checkbox" id="d-notify" checked>
+              <span class="consent-label">Njoftoje mjeshtrin me SMS kur ta aprovosh</span>
+            </label>
+            <button class="btn btn-ghost" type="button" id="d-reject" hidden>Kthe për ndryshime</button>
+            <button class="btn btn-ghost" type="button" id="d-unsuspend" hidden>
+              <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Hiq pezullimin</span>
+            </button>
+          </div>
+          <p class="form-error" id="d-decide-error" role="alert" hidden></p>
+
+          <div class="switch-row d-verify">
+            <div class="switch-copy">
+              <p class="switch-label" id="d-verify-label">Verifikuar</p>
+              <p class="switch-hint" id="d-verify-hint">Shenja «Verifikuar» te profili, kur ekipi e ka njohur mjeshtrin ose punën e tij.</p>
+            </div>
+            <button class="switch" type="button" role="switch" id="d-verify" aria-checked="false" aria-labelledby="d-verify-label" aria-describedby="d-verify-hint">
+              <span class="switch-knob" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="d-danger">
+            <button class="btn btn-danger" type="button" id="d-suspend" hidden>Pezullo</button>
+            <button class="btn btn-danger" type="button" id="d-remove">Fshije</button>
+          </div>
+        </section>
+
+        <div class="d-main">
+          <section class="panel" aria-labelledby="d-profile-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="d-profile-title">Profili</h2>
+              <p class="panel-meta"><span id="d-percent">0</span>% i plotë</p>
+            </div>
+            <form class="pro-form profile-form" id="a-form" novalidate>
+              <div class="field">
+                <label class="pro-label" for="a-name">Emri që shohin klientët</label>
+                <input class="field-input" id="a-name" name="name" type="text" maxlength="60" autocomplete="off" autocapitalize="words"
+                  aria-describedby="a-name-error">
+                <p class="field-error" id="a-name-error" hidden></p>
+              </div>
+
+              <fieldset class="field" id="a-trades" aria-describedby="a-trades-hint a-trades-error">
+                <legend class="pro-label">Zanatet</legend>
+                <p class="pro-hint" id="a-trades-hint">Deri në 5. <span class="count" id="a-trades-count">0 nga 5</span></p>
+                <div class="chips" id="a-trades-list"></div>
+                <p class="field-error" id="a-trades-error" hidden></p>
+              </fieldset>
+
+              <fieldset class="field" id="a-towns" aria-describedby="a-towns-hint a-towns-error">
+                <legend class="pro-label">Komunat ku punon</legend>
+                <p class="pro-hint" id="a-towns-hint">Deri në 10. <span class="count" id="a-towns-count">0 nga 10</span></p>
+                <div class="chips chips-selected" id="a-towns-selected"></div>
+                <label class="visually-hidden" for="a-towns-filter">Kërko komunën</label>
+                <input class="field-input town-filter" id="a-towns-filter" type="search" placeholder="Kërko komunën" autocomplete="off" enterkeyhint="search">
+                <div class="town-list" id="a-towns-list"></div>
+                <p class="pro-hint" id="a-towns-empty" hidden>Asnjë komunë me këtë emër.</p>
+                <p class="field-error" id="a-towns-error" hidden></p>
+              </fieldset>
+
+              <div class="field">
+                <label class="pro-label" for="a-about">Për punën e tij</label>
+                <textarea class="field-input field-area" id="a-about" name="about" maxlength="600" rows="5"
+                  aria-describedby="a-about-count a-about-error"></textarea>
+                <p class="pro-hint field-row-hint"><span>Çfarë bën, me çfarë materialesh, a punon në fundjavë.</span>
+                  <span class="count" id="a-about-count">0/600</span></p>
+                <p class="field-error" id="a-about-error" hidden></p>
+              </div>
+
+              <div class="field-pair">
+                <div class="field">
+                  <label class="pro-label" for="a-years">Vite përvojë</label>
+                  <input class="field-input" id="a-years" name="years" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+                    aria-describedby="a-years-error">
+                  <p class="field-error" id="a-years-error" hidden></p>
+                </div>
+                <div class="field">
+                  <label class="pro-label" for="a-price">Çmimi</label>
+                  <input class="field-input" id="a-price" name="priceNote" type="text" maxlength="60" placeholder="p.sh. nga 20 € / orë"
+                    aria-describedby="a-price-error">
+                  <p class="field-error" id="a-price-error" hidden></p>
+                </div>
+              </div>
+
+              <fieldset class="field">
+                <legend class="pro-label">Si të kontaktojnë klientët</legend>
+                <p class="pro-hint">Klientët e thërrasin në numrin e tij. A i shkruajnë edhe këtu?</p>
+                <label class="toggle-row">
+                  <span class="toggle-copy">WhatsApp</span>
+                  <input class="toggle" type="checkbox" role="switch" id="a-whatsapp" name="whatsapp">
+                </label>
+                <label class="toggle-row">
+                  <span class="toggle-copy">Viber</span>
+                  <input class="toggle" type="checkbox" role="switch" id="a-viber" name="viber">
+                </label>
+              </fieldset>
+
+              <p class="form-error" id="a-error" role="alert" hidden></p>
+              <div class="save-bar" id="a-save-bar">
+                <p class="save-state" id="a-save-state" role="status"></p>
+                <button class="btn btn-primary save-button" type="submit" id="a-save">
+                  <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Ruaj ndryshimet</span>
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel" aria-labelledby="d-avatar-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="d-avatar-title" tabindex="-1">Foto e profilit</h2>
+            </div>
+            <p class="form-error" id="d-photos-off" hidden>Fotot nuk mund të ngarkohen tani: ruajtja e fotove nuk është gati.</p>
+            <div class="avatar-row">
+              <div class="avatar" id="d-avatar"><span class="pp-initials" id="d-avatar-initials" aria-hidden="true"></span></div>
+              <div class="avatar-copy">
+                <p class="pro-hint">Fytyra e mjeshtrit ose logoja e firmës, e qartë.</p>
+                <div class="avatar-buttons">
+                  <input class="visually-hidden photo-input" type="file" id="d-avatar-input" accept="image/*">
+                  <label class="btn btn-ghost photo-pick" for="d-avatar-input" id="d-avatar-pick">Zgjidh foton</label>
+                  <button class="btn btn-danger photo-pick" type="button" id="d-avatar-delete" hidden>Fshije</button>
+                </div>
+                <p class="photo-status"><span id="d-avatar-status" role="status"></span><span id="d-avatar-progress" aria-hidden="true"></span></p>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="d-work-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="d-work-title" tabindex="-1">Fotot e punëve</h2>
+              <p class="panel-meta"><span id="d-work-count">0</span> nga 12</p>
+            </div>
+            <p class="pro-hint">Prek një foto për ta parë më madhe ose për ta fshirë.</p>
+            <ul class="work-grid" id="d-work-grid"></ul>
+            <input class="visually-hidden photo-input" type="file" id="d-work-input" accept="image/*" multiple>
+            <label class="btn btn-ghost photo-pick" for="d-work-input" id="d-work-pick">Shto foto</label>
+            <p class="photo-status" id="d-work-status" role="status"></p>
+          </section>
+        </div>
+
+        <section class="panel d-history" aria-labelledby="d-history-title">
+          <h2 class="panel-title" id="d-history-title">Historia</h2>
+          <p class="pro-hint" id="d-created"></p>
+          <ol class="history" id="d-history"></ol>
+          <p class="pro-hint" id="d-history-empty" hidden>Ekipi nuk ka bërë ende asnjë ndryshim këtu.</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- Add a mjeshtër -->
+    <section class="admin-section admin-add" data-page="add" hidden aria-labelledby="add-title">
+      <a class="back-link" href="#lista" id="add-back"><span aria-hidden="true">‹</span> Mjeshtrit</a>
+      <div class="pro-card">
+        <p class="eyebrow">Paneli i ekipit</p>
+        <h1 class="pro-title" id="add-title" tabindex="-1">Shto mjeshtër</h1>
+        <p class="pro-text">Për mjeshtrit që s’e plotësojnë dot profilin vetë në telefon. Pasi ta shtosh, e plotëson profilin dhe fotot këtu dhe e aprovon.</p>
+        <form class="pro-form" id="add-form" novalidate>
+          <label class="pro-label" for="add-phone">Numri i telefonit të mjeshtrit</label>
+          <input class="field-input" id="add-phone" name="phone" type="tel" inputmode="tel" autocomplete="off"
+            placeholder="044 123 456" maxlength="20" required aria-describedby="add-phone-hint add-phone-error">
+          <p class="pro-hint" id="add-phone-hint">Vetëm numra mobil të Kosovës (+383).</p>
+          <p class="field-error" id="add-phone-error" hidden></p>
+          <label class="consent">
+            <input class="consent-box" type="checkbox" id="add-consent" aria-describedby="add-consent-error">
+            <span class="consent-label">Mjeshtri pranoi që ta shtojmë (me telefon ose në zyrë)</span>
+          </label>
+          <p class="field-error" id="add-consent-error" hidden></p>
+          <p class="pro-hint add-note">Shtoje vetëm me pëlqimin e mjeshtrit. Ai mund të hyjë më vonë me këtë numër dhe ta ndryshojë profilin.</p>
+          <div class="form-error" id="add-form-error" role="alert" hidden></div>
+          <button class="btn btn-primary pro-submit" type="submit">
+            <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Shtoje</span>
+          </button>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- Dialog: send the profile back with a reason -->
+<dialog class="sheet" id="reject-sheet" aria-labelledby="reject-title" aria-describedby="reject-text">
+  <h2 class="sheet-title" id="reject-title">Kthe për ndryshime</h2>
+  <p class="sheet-text" id="reject-text">Mjeshtri e sheh arsyen në panelin e tij, e rregullon profilin dhe e dërgon prapë.</p>
+  <form class="sheet-form" id="reject-form" novalidate>
+    <div class="field">
+      <label class="pro-label" for="reject-note">Arsyeja (mjeshtri e sheh këtë tekst)</label>
+      <textarea class="field-input field-area sheet-area" id="reject-note" maxlength="300" rows="4" required
+        aria-describedby="reject-note-help reject-note-error"></textarea>
+      <p class="pro-hint" id="reject-note-help">Shkruaj çka duhet të ndryshojë, me fjalë të sjellshme.</p>
+      <p class="field-error" id="reject-note-error" hidden></p>
+    </div>
+    <div class="field">
+      <label class="pro-label" for="reject-internal">Shënim për ekipin (mjeshtri nuk e sheh)</label>
+      <textarea class="field-input field-area sheet-area" id="reject-internal" maxlength="300" rows="2"
+        aria-describedby="reject-internal-help"></textarea>
+      <p class="pro-hint" id="reject-internal-help">Jo i detyrueshëm. Ruhet te historia.</p>
+    </div>
+    <label class="consent" id="reject-notify-row" hidden>
+      <input class="consent-box" type="checkbox" id="reject-notify" checked>
+      <span class="consent-label">Njoftoje mjeshtrin me SMS</span>
+    </label>
+    <p class="form-error" id="reject-error" role="alert" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-close>Anulo</button>
+      <button class="btn btn-primary" type="submit" id="reject-go">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Ktheje</span>
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Dialog: suspend with a reason -->
+<dialog class="sheet" id="suspend-sheet" aria-labelledby="suspend-title" aria-describedby="suspend-text">
+  <h2 class="sheet-title" id="suspend-title">Ta pezullojmë mjeshtrin?</h2>
+  <p class="sheet-text" id="suspend-text">Profili nuk shfaqet te klientët dhe mjeshtri nuk mund ta ndryshojë. Pezullimin mund ta heqësh më vonë.</p>
+  <form class="sheet-form" id="suspend-form" novalidate>
+    <div class="field">
+      <label class="pro-label" for="suspend-note">Arsyeja (mjeshtri e sheh këtë tekst)</label>
+      <textarea class="field-input field-area sheet-area" id="suspend-note" maxlength="300" rows="4" required
+        aria-describedby="suspend-note-help suspend-note-error"></textarea>
+      <p class="pro-hint" id="suspend-note-help">Shkruaj çka duhet të ndryshojë, me fjalë të sjellshme.</p>
+      <p class="field-error" id="suspend-note-error" hidden></p>
+    </div>
+    <div class="field">
+      <label class="pro-label" for="suspend-internal">Shënim për ekipin (mjeshtri nuk e sheh)</label>
+      <textarea class="field-input field-area sheet-area" id="suspend-internal" maxlength="300" rows="2"
+        aria-describedby="suspend-internal-help"></textarea>
+      <p class="pro-hint" id="suspend-internal-help">Jo i detyrueshëm. Ruhet te historia.</p>
+    </div>
+    <p class="form-error" id="suspend-error" role="alert" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-close>Anulo</button>
+      <button class="btn btn-danger" type="submit" id="suspend-go">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Pezulloje</span>
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Dialog: delete the mjeshtër, typed confirmation -->
+<dialog class="sheet" id="remove-sheet" aria-labelledby="remove-title" aria-describedby="remove-text">
+  <h2 class="sheet-title" id="remove-title">Ta fshijmë këtë mjeshtër?</h2>
+  <p class="sheet-text" id="remove-text"></p>
+  <form class="sheet-form" id="remove-form" novalidate>
+    <div class="field">
+      <label class="pro-label" for="remove-confirm">Shkruaj FSHIJE për ta konfirmuar</label>
+      <input class="field-input" id="remove-confirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10">
+    </div>
+    <p class="form-error" id="remove-error" role="alert" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-close>Anulo</button>
+      <button class="btn btn-danger" type="submit" id="remove-go" disabled>
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije përgjithmonë</span>
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Dialog: one photo, to look at or delete -->
+<dialog class="sheet" id="photo-sheet" aria-labelledby="photo-sheet-title">
+  <h2 class="sheet-title" id="photo-sheet-title"></h2>
+  <img class="sheet-photo" id="photo-sheet-img" alt="">
+  <div class="sheet-actions" id="photo-sheet-actions">
+    <button class="btn btn-danger" type="button" data-photo="delete">Fshije foton</button>
+    <button class="btn btn-ghost" type="button" data-photo="close">Mbyll</button>
+  </div>
+  <div class="sheet-confirm" id="photo-sheet-confirm" hidden>
+    <p class="sheet-text">Ta fshijmë këtë foto? Mjeshtri nuk e sheh më në profilin e tij.</p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-photo="keep">Jo, mbaje</button>
+      <button class="btn btn-danger" type="button" data-photo="delete-yes">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Po, fshije</span>
+      </button>
+    </div>
+  </div>
+  <p class="form-error" id="photo-sheet-error" role="alert" hidden></p>
+</dialog>
+
+<p class="visually-hidden" id="announce" role="status"></p>
+<p class="toast" id="toast" role="status" aria-live="polite"></p>
+
+<!-- @sprite -->
+</body>
+</html>

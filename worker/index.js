@@ -1,6 +1,6 @@
 // Cloudflare Worker entry. Static files in dist/ are served by Workers static assets (the ASSETS binding);
 // the dynamic routes reuse the handlers in functions/, which keep the Pages Functions signature.
-// Mjeshtër photos (/foto/<id>.jpg) come from R2.
+// Mjeshtër photos (/foto/<id>.jpg) come from R2. The team admin's page (/admin/) is static; its API is /api/admin/*.
 
 import * as subscribe from '../functions/api/subscribe.js';
 import * as konfirmo from '../functions/konfirmo.js';
@@ -8,6 +8,7 @@ import * as cregjistrohu from '../functions/cregjistrohu.js';
 import {
   dergo, dil, disponueshem, foto, fotoFshi, fotoRenditja, fshi, hyr, kodi, profili, une,
 } from '../functions/api/mjeshtri.js';
+import * as admin from '../functions/api/admin.js';
 import { servePhoto } from '../server/photos.js';
 
 const ROUTES = {
@@ -25,6 +26,18 @@ const ROUTES = {
   '/api/mjeshtri/foto/fshi': fotoFshi,
   '/api/mjeshtri/foto/renditja': fotoRenditja,
   '/api/mjeshtri/fshi': fshi,
+  '/api/admin/lidhja': admin.lidhja,
+  '/api/admin/hyr': admin.hyr,
+  '/api/admin/une': admin.une,
+  '/api/admin/dil': admin.dil,
+  '/api/admin/mjeshtrit': admin.mjeshtrit,
+  '/api/admin/mjeshtri': admin.mjeshtri,
+  '/api/admin/vendim': admin.vendim,
+  '/api/admin/profili': admin.profili,
+  '/api/admin/foto': admin.foto,
+  '/api/admin/foto/fshi': admin.fotoFshi,
+  '/api/admin/shto': admin.shto,
+  '/api/admin/fshi': admin.fshi,
 };
 
 const PHOTO_PATH = /^\/foto\/([^/]+)\.jpg$/;

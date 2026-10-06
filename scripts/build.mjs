@@ -143,16 +143,36 @@ for (const file of proPages) {
     .replace('<!-- @sprite -->', sprite));
 }
 
+// /admin: the team's panel. It reuses the panel's stylesheet and its api, catalog and photo modules, so its script
+// hash covers those too. Built only when src/admin/ exists.
+const adminPages = ['admin/index.html'].filter((f) => existsSync(join(dist, f)));
+if (adminPages.length) {
+  const adminJs = [
+    ...readdirSync(join(src, 'admin')).filter((f) => f.endsWith('.js')).map((f) => join('admin', f)),
+    ...['api.js', 'catalog.js', 'photo.js'].map((f) => join('mjeshtri', f)),
+  ].sort();
+  const adminJsHash = createHash('sha256').update(adminJs.map((f) => readFileSync(join(src, f))).join('\0')).digest('hex').slice(0, 10);
+  const adminCssHash = existsSync(join(src, 'admin', 'admin.css')) ? hash('admin/admin.css') : '';
+  for (const file of adminPages) {
+    writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8'))
+      .replaceAll('{{APP_CSS_HASH}}', appCssHash)
+      .replaceAll('{{APP_JS_HASH}}', appJsHash)
+      .replaceAll('{{ADMIN_CSS_HASH}}', adminCssHash)
+      .replaceAll('{{ADMIN_JS_HASH}}', adminJsHash)
+      .replace('<!-- @sprite -->', sprite));
+  }
+}
+
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
-  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
+  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\nDisallow: /admin/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
 if (siteUrl) {
   writeFileSync(join(dist, 'sitemap.xml'),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/mjeshter</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n</urlset>\n`);
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', 'mjeshter.html', ...lojaPages, ...gamePages, ...proPages]) {
+for (const file of ['index.html', '404.html', 'privatesia.html', 'mjeshter.html', ...lojaPages, ...gamePages, ...proPages, ...adminPages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

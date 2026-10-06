@@ -123,6 +123,11 @@ for (const file of gamePages) {
   writeFileSync(join(dist, file), common(readFileSync(join(dist, file), 'utf8')).replace('<!-- @sprite -->', sprite));
 }
 
+// /mjeshter (craftsman signup) takes the homepage's brand sprite, like the privacy page.
+let mjeshter = readFileSync(join(src, 'mjeshter.html'), 'utf8');
+mjeshter = common(mjeshter).replace('<!-- @sprite -->', sprite);
+writeFileSync(join(dist, 'mjeshter.html'), mjeshter);
+
 // /mjeshtri: the mjeshtër panel. Its own CSS and JS get cache-busting hashes; Turnstile only when a site key is set.
 const proPages = ['mjeshtri/index.html'].filter((f) => existsSync(join(dist, f)));
 const appCssHash = hash('mjeshtri/mjeshtri.css');
@@ -143,11 +148,11 @@ writeFileSync(join(dist, 'robots.txt'),
   `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
 if (siteUrl) {
   writeFileSync(join(dist, 'sitemap.xml'),
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n</urlset>\n`);
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/mjeshter</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n</urlset>\n`);
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', ...lojaPages, ...gamePages, ...proPages]) {
+for (const file of ['index.html', '404.html', 'privatesia.html', 'mjeshter.html', ...lojaPages, ...gamePages, ...proPages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

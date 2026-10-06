@@ -7,7 +7,7 @@
 .pro-loading { color: var(--mute); }
 .pro-card { display: flex; flex-direction: column; align-items: stretch; max-width: 520px; margin: 0 auto; }
 .pro-title { margin-top: 14px; font-size: clamp(28px, 4vw, 38px); line-height: 1.1; outline: none; overflow-wrap: anywhere; }
-.pro-text { margin-top: 14px; color: var(--mute); }
+.pro-text { margin-top: 14px; max-width: none; color: var(--mute); }  /* site.css has a homepage .pro-text too */
 .pro-text strong { color: var(--paper); font-weight: 600; white-space: nowrap; }
 
 .pro-form { margin-top: 28px; display: flex; flex-direction: column; }

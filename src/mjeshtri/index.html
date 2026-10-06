@@ -81,6 +81,7 @@
       </a>
       <a class="app-tab" href="#profili" data-tab="profili">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-profili"/></svg><span>Profili</span>
+        <span class="tab-dot" id="profili-dot" aria-hidden="true" hidden></span><span class="visually-hidden" id="profili-unsaved" hidden>, ka ndryshime të paruajtura</span>
       </a>
       <a class="app-tab" href="#foto" data-tab="foto">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-foto"/></svg><span>Foto</span>
@@ -274,7 +275,7 @@
             <p class="pro-hint">Një foto e qartë e fytyrës tënde ose logoja e firmës.</p>
             <input class="visually-hidden photo-input" type="file" id="avatar-input" accept="image/*">
             <label class="btn btn-ghost photo-pick" for="avatar-input" id="avatar-pick">Zgjidh foton</label>
-            <p class="photo-status" id="avatar-status" role="status"></p>
+            <p class="photo-status"><span id="avatar-status" role="status"></span><span id="avatar-progress" aria-hidden="true"></span></p>
           </div>
         </div>
       </section>
@@ -300,12 +301,12 @@
       <section class="panel" aria-labelledby="number-title">
         <h2 class="panel-title" id="number-title">Numri yt</h2>
         <p class="account-phone" data-phone></p>
-        <p class="pro-hint">Me këtë numër hyn në panel, dhe në këtë numër të thërrasin klientët. Numri nuk ndryshohet dot nga këtu.</p>
+        <p class="pro-hint">Me këtë numër hyn në panel. Në këtë numër të thërrasin dhe të shkruajnë klientët. Numri nuk ndryshohet dot nga këtu.</p>
       </section>
 
       <section class="panel" aria-labelledby="signout-title">
         <h2 class="panel-title" id="signout-title">Dalja</h2>
-        <p class="pro-hint">Në këtë telefon mbetesh i kyçur 90 ditë. Nëse ke hyrë në një telefon që s’e ke më, dil nga të gjitha.</p>
+        <p class="pro-hint">Në këtë telefon mbetesh i kyçur 90 ditë. Ke hyrë në një telefon që s’e ke më, ose në telefonin e dikujt tjetër? Dil nga të gjitha.</p>
         <div class="account-actions">
           <button class="btn btn-ghost" type="button" data-action="signout">Dil</button>
           <button class="btn btn-ghost" type="button" data-action="signout-all">Dil nga të gjitha pajisjet</button>
@@ -315,12 +316,13 @@
 
       <section class="panel" aria-labelledby="privacy-title">
         <h2 class="panel-title" id="privacy-title">Të dhënat e tua</h2>
-        <p class="pro-hint">Ruajmë vetëm atë që e sheh këtu: numrin, profilin dhe fotot. <a href="/privatesia">Si i ruajmë të dhënat</a></p>
+        <p class="pro-hint">Ruajmë vetëm atë që sheh këtu: numrin tënd, profilin, fotot dhe sa herë të kanë kontaktuar klientët. <a href="/privatesia">Si i ruajmë të dhënat</a></p>
       </section>
 
       <section class="panel panel-danger" aria-labelledby="delete-title">
         <h2 class="panel-title" id="delete-title">Fshije llogarinë</h2>
-        <p class="pro-hint">Profili, fotot dhe numrat fshihen përgjithmonë. Mund të hysh prapë më vonë, por fillon nga e para.</p>
+        <p class="pro-hint">Profili, fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë. Mund të hysh prapë më vonë, por fillon nga e para.</p>
+        <p class="pro-hint">Do vetëm të pushosh pak? Fike «Marr punë tani» në Ballinë.</p>
         <button class="btn btn-danger" type="button" data-action="delete-open">Fshije llogarinë</button>
       </section>
     </section>
@@ -337,6 +339,13 @@
     <button class="btn btn-ghost" type="button" data-photo="right">Lëvize pas</button>
     <button class="btn btn-danger" type="button" data-photo="delete">Fshije foton</button>
   </div>
+  <div class="sheet-confirm" id="photo-sheet-confirm" hidden>
+    <p class="sheet-text" id="photo-sheet-question">Ta fshijmë këtë foto?</p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-photo="keep">Jo, mbaje</button>
+      <button class="btn btn-danger" type="button" data-photo="delete-yes">Po, fshije</button>
+    </div>
+  </div>
   <p class="form-error" id="photo-sheet-error" role="alert" hidden></p>
   <button class="btn sheet-close" type="button" data-photo="close">Mbyll</button>
 </dialog>
@@ -344,17 +353,30 @@
 <!-- Dialog: delete the account -->
 <dialog class="sheet" id="delete-sheet" aria-labelledby="delete-sheet-title" aria-describedby="delete-sheet-text">
   <h2 class="sheet-title" id="delete-sheet-title">Ta fshijmë llogarinë?</h2>
-  <p class="sheet-text" id="delete-sheet-text">Profili, fotot dhe numrat e tu fshihen përgjithmonë dhe klientët nuk të gjejnë më. Kjo nuk kthehet mbrapsht.</p>
+  <p class="sheet-text" id="delete-sheet-text">Profili, të gjitha fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë, dhe del nga çdo telefon. Klientët nuk të gjejnë më. Kjo nuk kthehet mbrapsht.</p>
   <label class="consent">
     <input class="consent-box" type="checkbox" id="delete-confirm">
     <span class="consent-label">Po, dua ta fshij llogarinë dhe gjithçka në të.</span>
   </label>
   <p class="form-error" id="delete-error" role="alert" hidden></p>
   <div class="sheet-actions">
+    <button class="btn btn-ghost" type="button" data-action="delete-cancel">Anulo</button>
     <button class="btn btn-danger" type="button" id="delete-go" disabled>
       <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije përgjithmonë</span>
     </button>
-    <button class="btn btn-ghost" type="button" data-action="delete-cancel">Anulo</button>
+  </div>
+</dialog>
+
+<!-- Dialog: sign out on every phone -->
+<dialog class="sheet" id="signout-sheet" aria-labelledby="signout-sheet-title" aria-describedby="signout-sheet-text">
+  <h2 class="sheet-title" id="signout-sheet-title">Të dalim nga të gjitha pajisjet?</h2>
+  <p class="sheet-text" id="signout-sheet-text">Do të dalësh nga çdo telefon dhe kompjuter ku ke hyrë, edhe nga ky. Për të hyrë prapë të duhet një kod i ri me SMS.</p>
+  <p class="form-error" id="signout-sheet-error" role="alert" hidden></p>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" type="button" data-action="signout-all-cancel" autofocus>Anulo</button>
+    <button class="btn btn-danger" type="button" id="signout-all-go">
+      <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Po, dil nga të gjitha</span>
+    </button>
   </div>
 </dialog>
 

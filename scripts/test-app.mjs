@@ -375,6 +375,19 @@ async function main() {
       if (absorbed.status !== 200) assert((await me(pro)).status === 200, 'the server did not recover after the refused upload');
       assert(sql('SELECT COUNT(*) AS n FROM pro_photos')[0].n === before, 'something was stored');
     });
+    await check('27a. a photo sent with location data (Exif) is stored without it', async () => {
+      const exif = Buffer.concat([Buffer.from('Exif\0\0', 'binary'), Buffer.from('GPS 42.6629 N 21.1655 E camera'.repeat(4))]);
+      const app1 = Buffer.concat([Buffer.from([0xFF, 0xE1, (exif.length + 2) >> 8, (exif.length + 2) & 0xFF]), exif]);
+      const comment = Buffer.concat([Buffer.from([0xFF, 0xFE, 0x00, 0x0C]), Buffer.from('Arben 2026')]);
+      const tagged = Buffer.concat([JPEG.subarray(0, 2), app1, comment, JPEG.subarray(2)]);
+      const r = await upload('pune', tagged, { cookie: pro });
+      assert(r.status === 200, `status ${r.status}`);
+      const stored = Buffer.from(await (await request(`${BASE}${r.data.photo.url}`)).arrayBuffer());
+      assert(stored.equals(JPEG), `stored ${stored.length} bytes, expected the ${JPEG.length} without Exif`);
+      assert(!stored.includes(Buffer.from('GPS')) && !stored.includes(Buffer.from('Arben')), 'metadata kept');
+      const del = await api('/api/mjeshtri/foto/fshi', { id: r.data.photo.id }, { cookie: pro });
+      assert(del.status === 200, 'cleanup');
+    });
     await check('28. a new profile photo replaces the old one, which is deleted from R2', async () => {
       const r = await upload('profili', JPEG, { cookie: pro });
       assert(r.status === 200 && r.data.photo.id !== profilePhoto.id, `status ${r.status}`);
@@ -426,13 +439,17 @@ async function main() {
     });
 
     console.log('The dashboard: approval, availability, account');
-    await check('33. sending a complete profile: pending, and saying so again is harmless; edits keep it pending', async () => {
+    await check('33. sending a complete profile: pending, and saying so again is harmless; edits keep it pending but complete', async () => {
       const r = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
       assert(r.status === 200 && r.data.dashboard.status === 'pending' && r.data.dashboard.submittedAt > 0, JSON.stringify(r.data));
       const again = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
       assert(again.status === 200 && again.data.dashboard.status === 'pending', `again: ${again.status}`);
       const edit = await api('/api/mjeshtri/profili', { ...FULL, years: 16 }, { cookie: pro });
       assert(edit.status === 200 && edit.data.dashboard.status === 'pending', 'edit changed the status');
+      // Once sent, the profile can't be emptied of what was needed to send it.
+      const emptied = await api('/api/mjeshtri/profili', { ...FULL, name: ' ', trades: [], towns: [] }, { cookie: pro });
+      assert(emptied.status === 400 && ['name', 'trades', 'towns'].every((k) => emptied.data.errors[k]), JSON.stringify(emptied.data));
+      assert(sql("SELECT years FROM pros WHERE phone = '+38344200300'")[0].years === 16, 'saved anyway');
     });
     await check('34. rejected with a reason: shown, and sending again clears it', async () => {
       sql("UPDATE pros SET status = 'rejected', status_note = 'Fotoja e profilit nuk duket qartë.' WHERE phone = '+38344200300'");

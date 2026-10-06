@@ -15,7 +15,9 @@ export const PROFILE_MESSAGES = {
   nameChars: 'Emri mund të ketë vetëm shkronja, numra, hapësira dhe shenjat . - \' &',
   aboutTooLong: `Përshkrimi mund të ketë deri në ${LIMITS.about} shkronja.`,
   tradesTooMany: `Zgjidh deri në ${LIMITS.maxTrades} zanate.`,
+  tradesMissing: 'Zgjidh të paktën një zanat. Profili yt është dërguar, prandaj nuk mund të mbetet pa zanat.',
   townsTooMany: `Zgjidh deri në ${LIMITS.maxTowns} komuna.`,
+  townsMissing: 'Zgjidh të paktën një komunë. Profili yt është dërguar, prandaj nuk mund të mbetet pa komunë.',
   yearsInvalid: `Shkruaji vitet e përvojës me numër, nga 0 deri në ${LIMITS.maxYears}.`,
   priceTooLong: `Çmimi mund të ketë deri në ${LIMITS.priceNote} shkronja.`,
   invalid: 'Disa të dhëna nuk janë në rregull. Kontrolloji fushat e shënuara.',
@@ -74,10 +76,15 @@ const bool = (v) => v === true || v === 1 || v === '1' || v === 'true';
  * Checks a profile sent by the dashboard. Every field is optional while saving a draft; what is needed to
  * send it for approval is decided by the checklist. Returns { profile, errors } (errors maps field → message).
  */
-export function validateProfile(input) {
+/**
+ * Cleans and checks a profile from the form. A profile that is with the team or live (`live`) must keep the items
+ * needed to send it: a name, a trade and a municipality.
+ */
+export function validateProfile(input, { live = false } = {}) {
   const errors = {};
   const name = cleanLine(input.name);
-  if (name.length > LIMITS.name) errors.name = PROFILE_MESSAGES.nameTooLong;
+  if (live && name.length < 2) errors.name = PROFILE_MESSAGES.nameMissing;
+  else if (name.length > LIMITS.name) errors.name = PROFILE_MESSAGES.nameTooLong;
   else if (name && !NAME_CHARS.test(name)) errors.name = PROFILE_MESSAGES.nameChars;
 
   const about = cleanText(input.about);
@@ -86,10 +93,12 @@ export function validateProfile(input) {
   const trades = slugList(input.trades ?? [], TRADE_SLUGS);
   if (!trades) errors.trades = PROFILE_MESSAGES.invalid;
   else if (trades.length > LIMITS.maxTrades) errors.trades = PROFILE_MESSAGES.tradesTooMany;
+  else if (live && !trades.length) errors.trades = PROFILE_MESSAGES.tradesMissing;
 
   const towns = slugList(input.towns ?? [], TOWN_SLUGS);
   if (!towns) errors.towns = PROFILE_MESSAGES.invalid;
   else if (towns.length > LIMITS.maxTowns) errors.towns = PROFILE_MESSAGES.townsTooMany;
+  else if (live && !towns.length) errors.towns = PROFILE_MESSAGES.townsMissing;
 
   let years = null;
   const rawYears = typeof input.years === 'string' ? input.years.trim() : input.years;
@@ -114,7 +123,7 @@ const parseList = (json) => { try { const v = JSON.parse(json); return Array.isA
 
 export const photoUrl = (id) => `/foto/${id}.jpg`;
 
-function checklist(p, photos) {
+function checklist(p, photos, photosEnabled) {
   const done = {
     name: p.name.length >= 2,
     trades: p.trades.length > 0,
@@ -124,7 +133,8 @@ function checklist(p, photos) {
     work: photos.work.length >= MIN_WORK_PHOTOS,
     years: p.years !== null,
   };
-  const items = CHECKLIST.map((c) => ({ ...c, done: done[c.key] }));
+  // Without photo storage (a misconfigured deploy) nobody could add a profile photo, so it can't block sending.
+  const items = CHECKLIST.map((c) => ({ ...c, required: c.required && (c.key !== 'photo' || photosEnabled), done: done[c.key] }));
   return {
     items,
     ready: items.every((i) => !i.required || i.done),
@@ -177,7 +187,7 @@ export async function loadDashboard(cfg, proId, now) {
     photos,
     photosEnabled: Boolean(cfg.photos),
     stats,
-    checklist: checklist(profile, photos),
+    checklist: checklist(profile, photos, Boolean(cfg.photos)),
   };
 }
 

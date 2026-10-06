@@ -8,7 +8,8 @@ import { shrinkPhoto } from './photo.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const TABS = ['ballina', 'profili', 'foto', 'llogaria'];
-const UNSAVED = 'Ke ndryshime në profil që nuk i ke ruajtur. Të dalësh pa i ruajtur?';
+const TAB_NAMES = { ballina: 'Ballina', profili: 'Profili', foto: 'Foto', llogaria: 'Llogaria' };
+const PAGE_TITLE = 'Paneli i mjeshtrit | Rregullo';
 
 let dash = null;          // the last dashboard state from the server
 let isOpen = false;
@@ -34,7 +35,7 @@ function toast(message) {
   el.textContent = message;
   el.classList.add('is-on');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.classList.remove('is-on'); el.textContent = ''; }, 4000);
+  toastTimer = setTimeout(() => { el.classList.remove('is-on'); el.textContent = ''; }, 6000);
 }
 
 const fold = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -75,6 +76,7 @@ const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash
 
 function showTab(tab, focus) {
   current = tab;
+  document.title = `${TAB_NAMES[tab]} · ${PAGE_TITLE}`;
   for (const s of document.querySelectorAll('[data-section]')) s.hidden = s.dataset.section !== tab;
   for (const a of document.querySelectorAll('[data-tab]')) {
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
@@ -86,19 +88,22 @@ function showTab(tab, focus) {
   }
 }
 
+// Changing tab loses nothing (the sections are only hidden), so unsaved profile changes just mark the Profili tab.
 window.addEventListener('hashchange', () => {
   if (!isOpen) return;
-  const next = tabFromHash();
-  if (current === 'profili' && next !== 'profili' && dirty() && !window.confirm(UNSAVED)) {
-    history.replaceState(null, '', '#profili');
-    return;
-  }
-  showTab(next, true);
+  showTab(tabFromHash(), true);
   if (focusAfterRoute) { focusField(focusAfterRoute); focusAfterRoute = ''; }
 });
 
 window.addEventListener('beforeunload', (e) => {
-  if (isOpen && dirty()) { e.preventDefault(); e.returnValue = ''; }
+  if (isOpen && (dirty() || pending.length)) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// The skip link jumps past the tab bar to the open section's heading. It must not change the #hash, which picks the tab.
+document.querySelector('.skip').addEventListener('click', (e) => {
+  if (!isOpen) return;
+  e.preventDefault();
+  $(`[data-section="${current}"] .pro-title`).focus();
 });
 
 let focusAfterRoute = '';
@@ -124,6 +129,7 @@ export function closeDashboard() {
   pending.length = 0;
   profileForm.reset();
   for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  document.title = PAGE_TITLE;
   if (location.hash) history.replaceState(null, '', location.pathname);
 }
 
@@ -194,9 +200,6 @@ function checkItem(item) {
 }
 
 function renderBallina() {
-  const firstName = dash.profile.name.split(/\s+/)[0];
-  $('#ballina-title').textContent = firstName ? `Mirë se erdhe, ${firstName}!` : 'Mirë se erdhe!';
-
   const [title, text] = STATES[dash.status] || STATES.draft;
   $('#state-card').dataset.state = dash.status;
   $('#state-title').textContent = title;
@@ -243,18 +246,25 @@ $('#available').addEventListener('click', async (e) => {
     return;
   }
   apply(data.dashboard);
-  toast(next ? 'Klientët shohin që merr punë të reja.' : 'Klientët shohin që tani për tani nuk merr punë.');
+  toast(next ? 'Tani klientët shohin që merr punë.' : 'Tani klientët shohin që nuk merr punë.');
 });
 
 $('#submit').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   setError($('#submit-error'), '');
+  busy(btn, true);
+  // The checklist shows what is saved, so unsaved profile changes are saved first.
+  if (dirty() && !(await saveForm())) {
+    busy(btn, false);
+    setError($('#submit-error'), 'Ndryshimet në profil nuk u ruajtën. Shiko te Profili çfarë duhet rregulluar.');
+    return;
+  }
   if (!dash.checklist.ready) {
+    busy(btn, false);
     const missing = dash.checklist.items.filter((i) => i.required && !i.done).map((i) => ITEMS[i.key][0].toLowerCase());
     setError($('#submit-error'), `Para se ta dërgosh, plotësoji: ${missing.join(', ')}.`);
     return;
   }
-  busy(btn, true);
   const { data } = await api('/api/mjeshtri/dergo', {});
   busy(btn, false);
   if (!data.ok) { setError($('#submit-error'), data.message || GENERIC); return; }
@@ -403,8 +413,11 @@ $('#f-years').addEventListener('input', (e) => { e.target.value = e.target.value
 function renderSaveState() {
   const isDirty = dirty();
   $('#save').disabled = !isDirty || (dash && dash.status === 'suspended');
-  $('#save-state').textContent = isDirty ? 'Ndryshime të paruajtura' : 'Gjithçka është ruajtur';
+  const text = isDirty ? 'Ndryshime të paruajtura' : 'Gjithçka është ruajtur';
+  if ($('#save-state').textContent !== text) $('#save-state').textContent = text;
   $('#save-bar').classList.toggle('is-dirty', isDirty);
+  $('#profili-dot').hidden = !isDirty;
+  $('#profili-unsaved').hidden = !isDirty;
 }
 
 function onFormChange() {
@@ -425,15 +438,20 @@ function clearFieldErrors() {
   setError($('#profile-error'), '');
 }
 
-profileForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+// Saves the profile form. On errors they are shown by their fields, and the first one gets focus (on Profili,
+// switching there if needed). Resolves true when saved.
+async function saveForm() {
   clearFieldErrors();
   const body = readForm();
+  const showOnProfili = (id) => {
+    if (current === 'profili') focusField(id);
+    else { focusAfterRoute = id; location.hash = '#profili'; }
+  };
   if (body.years && Number(body.years) > LIMITS.maxYears) {
     setError($('#f-years-error'), `Shkruaji vitet nga 0 deri në ${LIMITS.maxYears}.`);
     $('#f-years').setAttribute('aria-invalid', 'true');
-    $('#f-years').focus();
-    return;
+    showOnProfili('f-years');
+    return false;
   }
   const btn = $('#save');
   busy(btn, true);
@@ -451,14 +469,20 @@ profileForm.addEventListener('submit', async (e) => {
         first = first || id;
       }
       setError($('#profile-error'), data.message);
-      if (first) focusField(first);
+      if (first) showOnProfili(first);
     } else {
       setError($('#profile-error'), data.message || GENERIC);
     }
-    return;
+    return false;
   }
   apply(data.dashboard, { refill: true });
   toast(data.message || 'U ruajt.');
+  return true;
+}
+
+profileForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  saveForm();
 });
 
 // ---------- the preview ----------
@@ -554,7 +578,9 @@ $('#avatar-input').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
+  // The status line is announced; the percentage beside it is only shown, so a screen reader isn't flooded.
   const status = $('#avatar-status');
+  const progress = $('#avatar-progress');
   status.textContent = 'Po përgatitet fotoja…';
   let blob;
   try {
@@ -563,9 +589,11 @@ $('#avatar-input').addEventListener('change', async (e) => {
     status.textContent = photoMessage(err);
     return;
   }
+  status.textContent = 'Po ngarkohet…';
   const { data } = await uploadJpeg('/api/mjeshtri/foto?lloji=profili', blob, (f) => {
-    status.textContent = `Po ngarkohet… ${Math.round(f * 100)}%`;
+    progress.textContent = `${Math.round(f * 100)}%`;
   });
+  progress.textContent = '';
   if (!data.ok) { status.textContent = data.message || GENERIC; return; }
   status.textContent = '';
   apply(data.dashboard);
@@ -634,10 +662,18 @@ function openSheet(i) {
   sheet.querySelector('[data-photo="first"]').disabled = i === 0;
   sheet.querySelector('[data-photo="left"]').disabled = i === 0;
   sheet.querySelector('[data-photo="right"]').disabled = i === work.length - 1;
+  askDelete(false);
   setError($('#photo-sheet-error'), '');
   if (!sheet.open) {
     if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
   }
+}
+
+// "Fshije foton" asks inside the sheet ("Po, fshije" / "Jo, mbaje") instead of the browser's own confirm box.
+function askDelete(on) {
+  $('#photo-sheet-confirm').hidden = !on;
+  sheet.querySelector('.sheet-actions').hidden = on;
+  if (on) sheet.querySelector('[data-photo="keep"]').focus();
 }
 
 function closeSheet() {
@@ -661,11 +697,12 @@ sheet.addEventListener('click', async (e) => {
   const action = e.target.closest('[data-photo]')?.dataset.photo;
   if (!action) return;
   if (action === 'close') { closeSheet(); return; }
+  if (action === 'delete') { askDelete(true); return; }
+  if (action === 'keep') { askDelete(false); sheet.querySelector('[data-photo="delete"]').focus(); return; }
   const ids = dash.photos.work.map((p) => p.id);
   const i = sheetIndex;
   let to = i;
-  if (action === 'delete') {
-    if (!window.confirm('Ta fshijmë këtë foto?')) return;
+  if (action === 'delete-yes') {
     const { data } = await api('/api/mjeshtri/foto/fshi', { id: ids[i] });
     if (!data.ok) { setError($('#photo-sheet-error'), data.message || GENERIC); return; }
     apply(data.dashboard);
@@ -690,15 +727,32 @@ sheet.addEventListener('click', async (e) => {
 
 // ---------- Llogaria ----------
 
-async function signOut(all) {
-  const { data } = await api('/api/mjeshtri/dil', all ? { all: true } : {});
+async function signOut() {
+  const { data } = await api('/api/mjeshtri/dil', {});
   if (!data.ok) { setError($('#signout-error'), data.message || GENERIC); return; }
-  window.dispatchEvent(new CustomEvent('rr:left', { detail: { message: all ? 'Dole nga të gjitha pajisjet.' : '' } }));
+  window.dispatchEvent(new CustomEvent('rr:left', { detail: { message: '' } }));
 }
 
-document.querySelector('[data-action="signout"]').addEventListener('click', () => signOut(false));
+document.querySelector('[data-action="signout"]').addEventListener('click', () => signOut());
+
+const outSheet = $('#signout-sheet');
 document.querySelector('[data-action="signout-all"]').addEventListener('click', () => {
-  if (window.confirm('Të dalim nga çdo telefon dhe kompjuter ku ke hyrë, edhe nga ky? Për t’u kthyer do të të duhet një kod i ri me SMS.')) signOut(true);
+  setError($('#signout-sheet-error'), '');
+  if (typeof outSheet.showModal === 'function') outSheet.showModal(); else outSheet.setAttribute('open', '');
+});
+document.querySelector('[data-action="signout-all-cancel"]').addEventListener('click', () => outSheet.close());
+outSheet.addEventListener('close', () => {
+  if (isOpen) document.querySelector('[data-action="signout-all"]').focus();
+});
+$('#signout-all-go').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  busy(btn, true);
+  const { data } = await api('/api/mjeshtri/dil', { all: true });
+  busy(btn, false);
+  if (!data.ok) { setError($('#signout-sheet-error'), data.message || GENERIC); return; }
+  isOpen = false;
+  outSheet.close();
+  window.dispatchEvent(new CustomEvent('rr:left', { detail: { message: 'Dole nga të gjitha pajisjet.' } }));
 });
 
 const delSheet = $('#delete-sheet');

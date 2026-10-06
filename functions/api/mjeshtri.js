@@ -234,7 +234,7 @@ export const dil = {
 export const profili = {
   onRequestPost: signedIn(async ({ cfg, pro, now, data }) => {
     if (suspended(pro)) return fail(403, PROFILE_MESSAGES.suspended);
-    const { profile, errors } = validateProfile(data);
+    const { profile, errors } = validateProfile(data, { live: pro.status === 'pending' || pro.status === 'approved' });
     if (Object.keys(errors).length) return fail(400, PROFILE_MESSAGES.invalid, { errors });
     await saveProfile(cfg, pro.id, profile, now);
     return dashboard(cfg, pro, now, { message: PROFILE_MESSAGES.saved });

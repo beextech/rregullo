@@ -18,6 +18,7 @@ const MAX_CANVAS_PIXELS = 16_000_000;    // iOS Safari will not draw a canvas ab
 const MAX_CANVAS_EDGE = 16_384;
 
 export async function shrinkPhoto(file, { maxEdge = 1600, square = false, squareSize = 800, quality = 0.82, minEdge = 300 } = {}) {
+  if (!(maxEdge >= 1 && squareSize >= 1 && minEdge >= 0)) throw new TypeError('shrinkPhoto: bad options');
   if (!(file instanceof Blob)) throw new PhotoError('unreadable', 'Not a file.');
   if (file.size > MAX_INPUT_BYTES) throw new PhotoError('too_big', 'The file is larger than 30 MB.');
   if (file.size === 0) throw new PhotoError('unreadable', 'The file is empty.');
@@ -57,10 +58,12 @@ export async function shrinkPhoto(file, { maxEdge = 1600, square = false, square
     bitmap = await decodeResized(file, W, H, scale, square);
     if (bitmap) {
       src = bitmap; srcW = bitmap.width; srcH = bitmap.height; srcScale = srcW / W;
-      if (!square) { outW = srcW; outH = srcH; }   // within 1 px of the plan; drawing 1:1 keeps it sharp
-    } else {
-      try { await img.decode(); } catch { /* drawImage still decodes; decode() only moves the work off the main thread */ }
+      // The browser may round the derived edge differently (Chrome: 12000x9000 -> 1600x1201). Drawn 1:1 below;
+      // a spare row or column is cropped, a missing one shrinks the output by 1 px. Never resampled again.
+      if (!square) { outW = Math.min(outW, srcW); outH = Math.min(outH, srcH); }
     }
+    // Without a bitmap, drawImage decodes the <img> itself. (Not img.decode() first: in Chromium that adds a
+    // second, full-size decode and made the fallback path 1.5-2x slower in tests.)
 
     // Halve in steps while more than 2x too big: one big jump in a single drawImage looks jagged.
     const maxScale = canvasFit(W, H);
@@ -76,17 +79,19 @@ export async function shrinkPhoto(file, { maxEdge = 1600, square = false, square
     }
 
     // Final draw. A square crop is the whole image drawn larger than the canvas, centred, so the canvas clips it.
-    let dx = 0, dy = 0, dw = outW, dh = outH;
+    let dw = outW, dh = outH;
     if (square) {
       const k = outW / Math.min(srcW, srcH);
       dw = srcW * k;
       dh = srcH * k;
-      dx = Math.round((outW - dw) / 2);
-      dy = Math.round((outH - dh) / 2);
+    } else if (src === bitmap) {
+      dw = srcW;
+      dh = srcH;
     }
-    const out = paint(src, outW, outH, dx, dy, dw, dh);
+    const out = paint(src, outW, outH, Math.round((outW - dw) / 2), Math.round((outH - dh) / 2), dw, dh);
     canvases.push(out);
     if (bitmap) { bitmap.close(); bitmap = null; }
+    if (isBlank(out)) throw new PhotoError('unreadable', 'The photo came out empty.');
 
     const blob = await toJpeg(out, Math.min(1, Math.max(0, quality)));
     if (!blob || blob.size === 0 || blob.type !== 'image/jpeg') throw new PhotoError('unreadable', 'The phone could not save the photo.');
@@ -101,7 +106,6 @@ export async function shrinkPhoto(file, { maxEdge = 1600, square = false, square
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.decoding = 'async';
     img.onload = () => { img.onload = img.onerror = null; resolve(img); };
     img.onerror = () => {
       img.onload = img.onerror = null;
@@ -116,7 +120,8 @@ function canvasFit(w, h) {
   return Math.min(1, Math.sqrt(MAX_CANVAS_PIXELS / (w * h)), MAX_CANVAS_EDGE / Math.max(w, h));
 }
 
-// Decodes and resizes in one step (off the main thread, no full-size bitmap where the browser supports it).
+// Decodes and resizes in one step, off the main thread. The bitmap handed back is output-sized, so no
+// full-size bitmap or canvas is kept (the browser may still decode at full size internally while it works).
 // Only one of resizeWidth/resizeHeight is passed, so the browser derives the other from its own idea of
 // the image's shape; if that disagrees with the <img> size, the EXIF rotation was mishandled and we fall back.
 // Returns null when unsupported (imageOrientation 'from-image' needs Chrome 112, Safari 16, Firefox 111;
@@ -159,7 +164,26 @@ function paint(src, w, h, dx, dy, dw, dh) {
   return c;
 }
 
-// iOS Safari counts canvas memory until a canvas is shrunk to nothing, not when it is garbage collected.
+// A decode that silently failed, or a draw dropped for lack of memory, leaves only our white paint.
+// (So does a fully transparent or pure white image; neither is a usable photo.)
+function isBlank(canvas) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  try {
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.drawImage(canvas, 0, 0, 16, 16);
+    const d = ctx.getImageData(0, 0, 16, 16).data;
+    for (let i = 0; i < d.length; i += 4) if (d[i] !== 255 || d[i + 1] !== 255 || d[i + 2] !== 255) return false;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    release(c);
+  }
+}
+
+// iOS Safari frees a canvas's memory late (on garbage collection) and caps the total; 0x0 frees it now.
 function release(c) {
   c.width = 0;
   c.height = 0;

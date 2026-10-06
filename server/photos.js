@@ -4,7 +4,7 @@
 // found through the profile it belongs to.
 
 import { hmac, uuid } from './crypto.js';
-import { jpegInfo } from './jpeg.js';
+import { jpegInfo, stripMetadata } from './jpeg.js';
 import { photoUrl } from './profile.js';
 import { log } from './subscribers.js';
 
@@ -40,13 +40,14 @@ async function uploadedTooMuch(cfg, proId, now) {
 }
 
 /**
- * Stores an uploaded photo. A new profile photo replaces the old one.
+ * Stores an uploaded photo, without any location or camera data in it. A new profile photo replaces the old one.
  * @returns {{ result: 'ok', photo: object } | { result: 'invalid' | 'limit' | 'too_many_today' }}
  */
-export async function savePhoto(cfg, proId, kind, bytes, now) {
-  const info = jpegInfo(bytes);
-  if (!info || Math.min(info.width, info.height) < PHOTO.minEdge || Math.max(info.width, info.height) > PHOTO.maxEdge) {
-    log('photo_rejected', { reason: info ? 'size' : 'not_jpeg' });
+export async function savePhoto(cfg, proId, kind, upload, now) {
+  const info = jpegInfo(upload);
+  const bytes = info && stripMetadata(upload);
+  if (!info || !bytes || Math.min(info.width, info.height) < PHOTO.minEdge || Math.max(info.width, info.height) > PHOTO.maxEdge) {
+    log('photo_rejected', { reason: info && bytes ? 'size' : 'not_jpeg' });
     return { result: 'invalid' };
   }
   const db = cfg.db;

@@ -14,15 +14,18 @@ function isStandalone(m) {
   return m === 0x01 || (m >= 0xD0 && m <= 0xD8);
 }
 
+function asBytes(bytes) {
+  if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
+  if (ArrayBuffer.isView(bytes)) return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return null;
+}
+
 // bytes: Uint8Array (an ArrayBuffer or any other ArrayBufferView is accepted too).
 // Returns { width, height } from the first SOFn segment, or null if the data is not a well-formed JPEG header.
 export function jpegInfo(bytes) {
   try {
-    let b;
-    if (bytes instanceof ArrayBuffer) b = new Uint8Array(bytes);
-    else if (ArrayBuffer.isView(bytes)) b = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    else return null;
-
+    const b = asBytes(bytes);
+    if (!b) return null;
     const n = b.length;
     if (n < 4 || b[0] !== 0xFF || b[1] !== 0xD8) return null;   // must start with SOI
 
@@ -54,6 +57,53 @@ export function jpegInfo(bytes) {
       i += length;
     }
     return null;                                            // too many segments: treat as hostile
+  } catch {
+    return null;
+  }
+}
+
+// APP1 (Exif and XMP: GPS position, camera, time taken), APP13 (IPTC) and COM segments can carry personal data.
+// A photo shrunk on the phone has none of them; one sent some other way has them removed before it is stored.
+const PRIVATE_MARKERS = new Set([0xE1, 0xED, 0xFE]);
+
+// Returns the JPEG without those segments (the same array when it has none), or null if the header can't be
+// walked up to the image data. Like jpegInfo, it never throws and never reads past the end.
+export function stripMetadata(bytes) {
+  try {
+    const b = asBytes(bytes);
+    if (!b) return null;
+    const n = b.length;
+    if (n < 4 || b[0] !== 0xFF || b[1] !== 0xD8) return null;
+
+    const keep = [[0, 2]];                                  // [start, end) ranges copied to the output
+    let dropped = false;
+    let i = 2;
+    for (let segments = 0; segments < MAX_SEGMENTS; segments++) {
+      if (i >= n || b[i] !== 0xFF) return null;
+      const start = i;
+      while (i < n && b[i] === 0xFF) i++;
+      if (i >= n) return null;
+      const marker = b[i++];
+
+      if (marker === 0x00 || marker === 0xD9) return null;
+      if (isStandalone(marker)) { keep.push([start, i]); continue; }
+      if (marker === 0xDA) {                                // start of scan: the rest is image data, kept as is
+        if (!dropped) return b;
+        keep.push([start, n]);
+        const out = new Uint8Array(keep.reduce((sum, [s, e]) => sum + e - s, 0));
+        let at = 0;
+        for (const [s, e] of keep) { out.set(b.subarray(s, e), at); at += e - s; }
+        return out;
+      }
+
+      if (i + 2 > n) return null;
+      const length = (b[i] << 8) | b[i + 1];
+      if (length < 2 || i + length > n) return null;
+      if (PRIVATE_MARKERS.has(marker)) dropped = true;
+      else keep.push([start, i + length]);
+      i += length;
+    }
+    return null;
   } catch {
     return null;
   }

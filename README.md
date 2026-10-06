@@ -29,6 +29,7 @@ Unsubscribe link ──► /cregjistrohu?s=…&t=… ──► address deleted, 
 |---|---|
 | `/` | The page. The signup form is in the hero (`#lajmerimi`). |
 | `/privatesia` | The privacy notice. It describes exactly what this code does. |
+| `/mjeshter` | Craftsman signup (`src/mjeshter.html`, `src/mjeshter.js`). Nothing is sent to the site: the form builds a WhatsApp click-to-chat link (wa.me/38345632031) with the details and the craftsman sends it. |
 | `POST /api/subscribe` | Takes JSON from the page's script, or a plain form post when JavaScript is off. |
 | `/konfirmo?t=<token>` | The confirmation link. GET only shows a page; the page posts the token, so link scanners can't confirm anyone. |
 | `/cregjistrohu?s=<id>&t=<sig>` | The unsubscribe link. It asks before acting, and also accepts one-click unsubscribe from mail apps (RFC 8058). |

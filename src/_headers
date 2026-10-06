@@ -19,3 +19,8 @@
 
 /icons/*
   Cache-Control: public, max-age=604800
+
+# Visitors who land on http:// (no redirect at the zone) get this module upgraded to https, which makes it a
+# cross-origin load; allowing it keeps the craftsman form working there. Public static file, no credentials.
+/mjeshter.js
+  Access-Control-Allow-Origin: *

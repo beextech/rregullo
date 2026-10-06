@@ -340,6 +340,8 @@ Trades and municipalities are in `src/mjeshtri/catalog.js`.
 
 **Photos.** At most 60 uploads a day per mjeshtër. The server checks that each upload really is a JPEG of a sensible size, and stops reading any body that passes 2 MB. Photos are served with their own locked-down headers (`Content-Security-Policy: sandbox`, `nosniff`, same-site only). R2's free tier covers 10 GB, roughly 40,000 photos at these sizes.
 
+**Privacy.** The "Paneli i mjeshtrit" part of the privacy notice (`/privatesia#mjeshtrit`, linked from the sign-in screen and from Llogaria) lists what the panel stores, how long, and who processes it (Cloudflare, Twilio). If you change `SIGNIN` in `server/signin.js`, the photo rules or the tables, change the notice too.
+
 **Setup before it goes live**
 1. **R2 (photo storage):** Cloudflare dashboard > **R2 Object Storage** > enable it (free up to 10 GB; Cloudflare asks for a card but charges nothing within the free tier). The next deploy creates the `rregullo-foto` bucket by itself. Until R2 is enabled, deploys of this version fail and the live site stays on the previous version.
 2. **Database tables:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0002` and `0003`. They only add tables, so the live site is unaffected.
@@ -360,5 +362,4 @@ Pull-request previews have no database or photo storage, so the panel answers wi
   - the launch email, which I wrote and which wasn't in the brief
 - **Legal review:** have the privacy notice reviewed. It describes this implementation accurately, but it doesn't claim compliance with any specific law, and it mentions Kosovo's Agency for Information and Privacy only as the place to complain.
 - **Contact email:** set `CONTACT_EMAIL`.
-- **Privacy notice for mjeshtër:** before the SMS secrets are set, add to `src/privatesia.html` what the mjeshtër panel stores (the phone number, a hash of each code and session, sign-in times, the profile and photos, the daily counts), that numbers go to the SMS provider, that photos are public once the profile is approved, and that deleting the account removes all of it. It currently describes only the launch list.
-- **Native speaker check for `/mjeshtri`:** the sign-in page, the four dashboard tabs, their error messages and the SMS text.
+- **Native speaker check for `/mjeshtri`:** the sign-in page, the four dashboard tabs, their error messages, the SMS text and the new "Paneli i mjeshtrit" part of the privacy notice.

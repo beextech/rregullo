@@ -18,6 +18,7 @@
 .pro-hint strong { color: var(--paper); font-weight: 600; white-space: nowrap; }
 .pro-hint a { color: var(--paper); text-decoration-color: rgba(241, 242, 239, .4); text-underline-offset: 3px; }
 .pro-hint a:hover { text-decoration-color: var(--lime); }
+.pro-privacy { margin-top: 20px; }
 .pro-human { margin-top: 20px; min-height: 65px; }
 .pro-submit { margin-top: 20px; justify-content: center; width: 100%; }
 .pro-form .form-error { margin-top: 20px; }

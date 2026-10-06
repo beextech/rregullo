@@ -621,10 +621,13 @@ async function main() {
       assert((await go('/foto/00000000-0000-4000-8000-000000000000.jpg')).status === 404, 'photo');
     });
     await check('41. logs contain no phone numbers or codes', async () => {
-      assert(!/\+?383\s?4\d|04\d\s?\d{3}/.test(devLog), 'a phone number appears in the logs');
+      // Photo ids are random UUIDs, and their digits can look like a number or a code by chance: leave them out.
+      const scanned = devLog.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
+      const hit = scanned.match(/\+?383\s?4\d|04\d\s?\d{3}/);
+      assert(!hit, `a phone number appears in the logs: ${hit && JSON.stringify(scanned.slice(Math.max(0, hit.index - 80), hit.index + 40))}`);
       for (const m of sms) {
         const code = (m.Body.match(/^(\d{6}) /) || [])[1];
-        assert(!devLog.includes(code), 'a code appears in the logs');
+        assert(!new RegExp(`(?<!\\d)${code}(?!\\d)`).test(scanned), 'a code appears in the logs');
       }
     });
   } finally {

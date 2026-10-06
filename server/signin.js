@@ -39,6 +39,7 @@ export function readAppConfig(env) {
   const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(siteUrl);
   return {
     db: env.DB,
+    photos: env.PHOTOS || null,        // R2 bucket for mjeshtër photos (step 2); missing in previews
     siteUrl,
     local,
     appSecret: env.APP_SECRET || '',
@@ -50,12 +51,18 @@ export function readAppConfig(env) {
   };
 }
 
-/** What is missing for sign-in to work. Locally, SMS and Turnstile may be absent (the code is shown on the page instead). */
-export function missingConfig(cfg) {
+/** What every signed-in request needs: the database, the site address and the secret. */
+export function missingCoreConfig(cfg) {
   const missing = [];
   if (!cfg.db) missing.push('DB (D1 binding)');
   if (!cfg.siteUrl) missing.push('SITE_URL');
   if (cfg.appSecret.length < 32) missing.push('APP_SECRET (32+ characters)');
+  return missing;
+}
+
+/** What is missing for sign-in to work. Locally, SMS and Turnstile may be absent (the code is shown on the page instead). */
+export function missingConfig(cfg) {
+  const missing = missingCoreConfig(cfg);
   if (!cfg.local && !smsConfigured(cfg.sms)) missing.push('TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN');
   if (!cfg.local && !cfg.turnstile.secret) missing.push('TURNSTILE_SECRET_KEY');
   return missing;

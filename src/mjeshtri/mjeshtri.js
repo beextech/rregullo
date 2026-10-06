@@ -1,28 +1,22 @@
-// The mjeshtër panel: sign in with a phone number and an SMS code, then the (for now small) signed-in view.
+// The mjeshtër panel: sign in with a phone number and an SMS code, then the dashboard (paneli.js).
 // Talks only to /api/mjeshtri/*; the session lives in an HttpOnly cookie the script never sees.
 
-const GENERIC = 'Diçka nuk shkoi si duhet. Provo përsëri pas pak.';
+import { GENERIC, api } from './api.js';
+import { closeDashboard, openDashboard } from './paneli.js';
+
 const RESEND_AFTER = 60;   // seconds, matching the server's one-SMS-a-minute limit
+const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 const $ = (sel) => document.querySelector(sel);
-const views = document.querySelectorAll('[data-view]');
+const views = document.querySelectorAll('main > [data-view]');
 let phoneTyped = '';
 let resendTimer = 0;
 
 function show(name, focus = true) {
   for (const v of views) v.hidden = v.dataset.view !== name;
+  if (name === 'phone') loadHumanCheck();
   const title = document.querySelector(`[data-view="${name}"] .pro-title`);
-  if (focus && title) title.focus();
-}
-
-async function api(path, body) {
-  const init = body === undefined
-    ? { headers: { Accept: 'application/json' } }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) };
-  let res;
-  try { res = await fetch(path, { ...init, credentials: 'same-origin' }); } catch { return { status: 0, data: { ok: false, message: GENERIC } }; }
-  const data = await res.json().catch(() => ({ ok: false, message: GENERIC }));
-  return { status: res.status, data };
+  if (focus && title && name !== 'app') title.focus();
 }
 
 function setError(el, message) {
@@ -36,8 +30,31 @@ function busy(form, on) {
   btn.classList.toggle('is-busy', on);
 }
 
+// ---------- the bot check (Cloudflare Turnstile), loaded only when the phone form is shown ----------
+
+const humanBox = $('.cf-turnstile');
+let humanWidget = null;
+let humanLoading = false;
+
+function loadHumanCheck() {
+  if (!humanBox || humanWidget !== null || humanLoading) return;
+  humanLoading = true;
+  const s = document.createElement('script');
+  s.src = TURNSTILE_SRC;
+  s.async = true;
+  s.onload = () => {
+    try {
+      humanWidget = window.turnstile.render(humanBox, {
+        sitekey: humanBox.dataset.sitekey, theme: humanBox.dataset.theme, size: humanBox.dataset.size,
+      });
+    } catch { /* the form still submits; the server then asks to retry the check */ }
+  };
+  s.onerror = () => { humanLoading = false; };
+  document.head.append(s);
+}
+
 function resetHumanCheck() {
-  if (window.turnstile) try { window.turnstile.reset(); } catch { /* not rendered */ }
+  if (window.turnstile && humanWidget !== null) try { window.turnstile.reset(humanWidget); } catch { /* not rendered */ }
 }
 
 function startResendTimer() {
@@ -63,6 +80,7 @@ phoneForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   setError($('#phone-error'), '');
   setError($('#phone-form-error'), '');
+  setError($('#signed-out-note'), '');
   phoneInput.removeAttribute('aria-invalid');
   const phone = phoneInput.value.trim();
   if (!phone) {
@@ -119,8 +137,8 @@ codeForm.addEventListener('submit', async (e) => {
   }
   busy(codeForm, true);
   const { data } = await api('/api/mjeshtri/hyr', { phone: phoneTyped, code });
-  busy(codeForm, false);
   if (!data.ok) {
+    busy(codeForm, false);
     if (data.field === 'code') {
       setError($('#code-error'), data.message);
       codeInput.setAttribute('aria-invalid', 'true');
@@ -131,7 +149,9 @@ codeForm.addEventListener('submit', async (e) => {
     return;
   }
   clearInterval(resendTimer);
-  await loadHome();
+  const opened = await loadDashboard(true);
+  busy(codeForm, false);
+  if (!opened) setError($('#code-form-error'), GENERIC);
 });
 
 document.querySelector('[data-action="change-number"]').addEventListener('click', () => {
@@ -150,26 +170,27 @@ document.querySelector('[data-action="resend"]').addEventListener('click', () =>
 
 // ---------- signed in ----------
 
-async function loadHome(focus = true) {
+async function loadDashboard(fresh) {
   const { status, data } = await api('/api/mjeshtri/une');
   if (status === 200 && data.ok) {
-    $('#home-phone').textContent = data.pro.phone;
-    show('home', focus);
+    show('app', false);
+    openDashboard(data.dashboard, { fresh });
     return true;
   }
   return false;
 }
 
-const signout = document.querySelector('[data-action="signout"]');
-signout.addEventListener('click', async () => {
-  signout.disabled = true;
-  const { data } = await api('/api/mjeshtri/dil', {});
-  signout.disabled = false;
-  if (!data.ok) { setError($('#home-error'), data.message || GENERIC); return; }
+function signedOut(message) {
+  closeDashboard();
   phoneForm.reset();
+  setError($('#signed-out-note'), message || '');
   show('phone');
-});
+}
+
+// The server ended the session (expired, or "sign out everywhere" on another phone), or the dashboard signed out.
+window.addEventListener('rr:signedout', () => signedOut('Nuk je më i kyçur. Hyr prapë me numrin e telefonit.'));
+window.addEventListener('rr:left', (e) => signedOut(e.detail && e.detail.message));
 
 // ---------- start ----------
 
-if (!(await loadHome(false))) show('phone', false);
+if (!(await loadDashboard(false))) show('phone', false);

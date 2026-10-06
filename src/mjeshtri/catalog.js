@@ -64,4 +64,4 @@ export const TRADE_SLUGS = new Set(TRADES.map((t) => t.slug));
 export const TOWN_SLUGS = new Set(TOWNS.map((t) => t.slug));
 export const labelOf = (list, slug) => (list.find((x) => x.slug === slug) || { label: slug }).label;
 
-export const LIMITS = { name: 60, about: 600, priceNote: 60, maxTrades: 5, maxTowns: 10 };
+export const LIMITS = { name: 60, about: 600, priceNote: 60, maxTrades: 5, maxTowns: 10, maxYears: 60 };

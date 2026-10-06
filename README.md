@@ -298,17 +298,38 @@ To add a game: create `src/loja/<slug>/index.html` (copy the head, header and sp
 
 ## Mjeshtër panel (/mjeshtri)
 
-Step 1 of the app ([implementation guide](https://claude.ai/code/artifact/51fbc9e3-0603-434c-9676-6f7f0b561ffa)): mjeshtër sign in with their Kosovo mobile number and a 6-digit code sent by SMS. There is no password. Clients never sign in. The signed-in view is a placeholder until step 2 builds the dashboard.
+Steps 1 and 2 of the app ([implementation guide](https://claude.ai/code/artifact/51fbc9e3-0603-434c-9676-6f7f0b561ffa)). Mjeshtër sign in with their Kosovo mobile number and a 6-digit code sent by SMS; there is no password, and clients never sign in. Once signed in, a mjeshtër fills in a profile, adds photos and sends it for approval.
+
+The page (`src/mjeshtri/`) has four tabs:
+- **Ballina:** the profile's state (not sent, being checked, live, needs changes, suspended), the "Marr punë tani" switch, the checklist with "Dërgo për shqyrtim", and the last 30 days' calls, WhatsApp and Viber taps, profile views and reviews. The counts stay at zero until the public profiles (step 3) and reviews (step 4) exist.
+- **Profili:** name, up to 5 trades, up to 10 of the 38 municipalities, a few sentences about the work, years of experience, an optional price note and WhatsApp/Viber on or off, with a preview of what clients will see.
+- **Foto:** a profile photo and up to 12 work photos, in the order chosen. The phone shrinks each photo before it is sent (profile 800×800, work photos at most 1600 px), which also removes its location data.
+- **Llogaria:** the number, signing out (here or on every phone) and deleting the account.
 
 | Path | What it is |
 |---|---|
-| `/mjeshtri/` | The page (`src/mjeshtri/`): phone number, then the code, then the signed-in view |
 | `POST /api/mjeshtri/kodi` | `{ phone, turnstile }`: checks the bot test, then sends a code by SMS |
 | `POST /api/mjeshtri/hyr` | `{ phone, code }`: checks the code and sets the `rr_mjeshtri` cookie (HttpOnly, Secure, SameSite=Lax, 90 days) |
-| `GET /api/mjeshtri/une` | The signed-in mjeshtër, or 401 |
-| `POST /api/mjeshtri/dil` | Signs out |
+| `GET /api/mjeshtri/une` | Everything the dashboard shows, or 401 |
+| `POST /api/mjeshtri/dil` | `{ all? }`: signs out, on every phone with `all: true` |
+| `POST /api/mjeshtri/profili` | Saves the profile; invalid fields come back by name and nothing is saved |
+| `POST /api/mjeshtri/disponueshem` | `{ available }`: the "Marr punë tani" switch |
+| `POST /api/mjeshtri/dergo` | Sends the profile for approval (needs name, a trade, a municipality and a profile photo) |
+| `POST /api/mjeshtri/foto?lloji=profili\|pune` | The JPEG itself as the body (at most 2 MB, 200–2048 px); a new profile photo replaces the old one |
+| `POST /api/mjeshtri/foto/fshi` | `{ id }`: deletes a photo |
+| `POST /api/mjeshtri/foto/renditja` | `{ ids }`: the order of the work photos |
+| `POST /api/mjeshtri/fshi` | `{ confirm: 'FSHIJE' }`: deletes the account, its photos, counts and sessions |
+| `GET /foto/<id>.jpg` | A photo, straight from R2, cached for a year (a changed photo always gets a new id) |
 
-Tables (`migrations/0002_mjeshtrit.sql`): `pros` (one row per mjeshtër, created as `draft` at first sign-in), `sms_codes` (the current code's keyed hash and the send counters) and `sessions` (SHA-256 of each cookie token). Trades and the 38 municipalities are in `src/mjeshtri/catalog.js`.
+Every POST must come from this site, as JSON (or `image/jpeg` for photos), which a page elsewhere can't send without a CORS preflight that the API never answers.
+
+Tables:
+- `migrations/0002_mjeshtrit.sql`: `pros` (one row per mjeshtër, created as `draft` at first sign-in), `sms_codes` (the current code's keyed hash and the send counters) and `sessions` (SHA-256 of each cookie token).
+- `migrations/0003_paneli.sql`: `pro_photos` (one row per photo; the image is in R2 as `foto/<id>.jpg`) and `pro_stats_daily` (counts per mjeshtër per day). Both are deleted with the mjeshtër. Never rebuild the `pros` table (only `ALTER TABLE … ADD COLUMN`): rebuilding it would delete these rows through the cascade.
+
+Trades and municipalities are in `src/mjeshtri/catalog.js`.
+
+**Profile states.** A new account is `draft`. "Dërgo për shqyrtim" makes it `pending`; the team then sets `approved`, `rejected` (with a note in `status_note`, shown on Ballina) or `suspended`. A mjeshtër can keep editing while pending or approved. A suspended one can still look, sign out and delete the account, but not edit, upload, send or switch availability. Until the admin screen exists (step 6), approve from the Cloudflare dashboard (**D1 > rregullo-launch > Console**): `UPDATE pros SET status = 'approved', approved_at = unixepoch() * 1000, updated_at = unixepoch() * 1000 WHERE phone = '+38344…';` To ask for changes instead: `SET status = 'rejected', status_note = 'Shto një foto ku të shihet fytyra.'`.
 
 **Keeping SMS cheap and safe**
 - Cloudflare Turnstile must pass before any SMS goes out, and only `+383 43–49` mobile numbers get one.
@@ -317,12 +338,18 @@ Tables (`migrations/0002_mjeshtrit.sql`): `pros` (one row per mjeshtër, created
 - The answer is the same whether or not a number already has an account. Logs carry event names only, never numbers or codes.
 - A failed send isn't counted and leaves no usable code. Outside local development, the Worker refuses to send codes until the SMS and Turnstile secrets are set.
 
-**Setup before it goes live**
-1. **Turnstile:** Cloudflare dashboard > Turnstile > Add widget for `rregullo.net` (managed mode). Put the **site key** in `site.config.json` as `turnstileSiteKey` (it's public) and the **secret key** in the Worker: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
-2. **SMS (Twilio):** create the account, and check the price per SMS to Kosovo (+383) against a local gateway first. Register `Rregullo` as an alphanumeric sender ID (or buy a number, or use a Messaging Service). Then set `npx wrangler secret put TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`, and set `SMS_FROM` in `wrangler.toml` if it isn't `Rregullo`. To use another provider, replace `sendSms()` in `server/sms.js`; nothing else depends on Twilio.
-3. Deploy. The new migration is applied with `npm run db:migrate` (or by `npm run deploy:auto`).
+**Photos.** At most 60 uploads a day per mjeshtër. The server checks that each upload really is a JPEG of a sensible size, and stops reading any body that passes 2 MB. Photos are served with their own locked-down headers (`Content-Security-Policy: sandbox`, `nosniff`, same-site only). R2's free tier covers 10 GB, roughly 40,000 photos at these sizes.
 
-**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`). `npm run test:app` runs the 20 sign-in checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks.
+**Setup before it goes live**
+1. **R2 (photo storage):** Cloudflare dashboard > **R2 Object Storage** > enable it (free up to 10 GB; Cloudflare asks for a card but charges nothing within the free tier). The next deploy creates the `rregullo-foto` bucket by itself. Until R2 is enabled, deploys of this version fail and the live site stays on the previous version.
+2. **Database tables:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0002` and `0003`. They only add tables, so the live site is unaffected.
+3. **Turnstile:** Cloudflare dashboard > Turnstile > Add widget for `rregullo.net` (managed mode). Put the **site key** in `site.config.json` as `turnstileSiteKey` (it's public) and the **secret key** in the Worker: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
+4. **SMS (Twilio):** create the account, and check the price per SMS to Kosovo (+383) against a local gateway first. Register `Rregullo` as an alphanumeric sender ID (or buy a number, or use a Messaging Service). Then set `npx wrangler secret put TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`, and set `SMS_FROM` in `wrangler.toml` if it isn't `Rregullo`. To use another provider, replace `sendSms()` in `server/sms.js`; nothing else depends on Twilio.
+5. Deploy.
+
+Pull-request previews have no database or photo storage, so the panel answers with an error there.
+
+**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`); photos are kept in a local R2 under `.wrangler/state`. `npm run test:app` runs the sign-in and dashboard checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks. They cover sessions, every endpoint's same-site and method checks, saving and validating the profile, uploads (wrong types, sizes, the 12-photo and 60-a-day limits, replacing and deleting from R2), photo caching headers, approval states, the availability switch, the 30-day counts, suspension, signing out everywhere and deleting an account. The screens were also walked through in headless Chromium at 360 px, 390 px and 1280 px.
 
 ## Before launch, please also
 
@@ -333,5 +360,5 @@ Tables (`migrations/0002_mjeshtrit.sql`): `pros` (one row per mjeshtër, created
   - the launch email, which I wrote and which wasn't in the brief
 - **Legal review:** have the privacy notice reviewed. It describes this implementation accurately, but it doesn't claim compliance with any specific law, and it mentions Kosovo's Agency for Information and Privacy only as the place to complain.
 - **Contact email:** set `CONTACT_EMAIL`.
-- **Privacy notice for mjeshtër:** before the SMS secrets are set, add to `src/privatesia.html` what the mjeshtër sign-in stores (the phone number, a hash of each code and session, sign-in times) and that numbers go to the SMS provider. It currently describes only the launch list.
-- **Native speaker check for `/mjeshtri`:** the sign-in page, its error messages and the SMS text.
+- **Privacy notice for mjeshtër:** before the SMS secrets are set, add to `src/privatesia.html` what the mjeshtër panel stores (the phone number, a hash of each code and session, sign-in times, the profile and photos, the daily counts), that numbers go to the SMS provider, that photos are public once the profile is approved, and that deleting the account removes all of it. It currently describes only the launch list.
+- **Native speaker check for `/mjeshtri`:** the sign-in page, the four dashboard tabs, their error messages and the SMS text.

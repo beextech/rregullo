@@ -1,11 +1,13 @@
-// End-to-end test of the mjeshtër sign-in (step 1) against the real Worker and a local D1 database,
-// with scripts/mock-email.mjs standing in for Twilio (SMS) and Cloudflare Turnstile. Nothing is sent anywhere.
+// End-to-end test of the mjeshtër sign-in (step 1) and dashboard (step 2) against the real Worker, a local D1 database
+// and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS) and Cloudflare Turnstile.
+// Nothing is sent or stored anywhere else.
 //   npm run test:app      (npm test runs it after the signup tests)
 
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { hmac } from '../server/crypto.js';
 import { startMockEmail } from './mock-email.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -59,6 +61,7 @@ async function api(path, body, { ip = freshIp(), origin = BASE, cookie = '', typ
 const askCode = (phone, opts = {}) => api('/api/mjeshtri/kodi', { phone, turnstile: opts.turnstile ?? 'pass' }, opts);
 const signIn = (phone, code, opts = {}) => api('/api/mjeshtri/hyr', { phone, code }, opts);
 const cookieOf = (setCookie) => setCookie.split(';')[0];
+const normalised = (phone) => `+383${phone.replace(/\D/g, '').replace(/^0/, '')}`;
 
 async function main() {
   console.log('Building and starting the local stack…');
@@ -91,9 +94,12 @@ async function main() {
       const res = await fetch(`${BASE}/mjeshtri/`);
       const html = await res.text();
       assert(res.status === 200 && html.includes('Hyr me numrin e telefonit'), `status ${res.status}`);
-      assert(html.includes('data-sitekey="1x00000000000000000000AA"') && html.includes('challenges.cloudflare.com/turnstile'), 'Turnstile widget');
+      assert(html.includes('data-sitekey="1x00000000000000000000AA"'), 'Turnstile widget');
+      const js = await (await fetch(`${BASE}/mjeshtri/mjeshtri.js`)).text();
+      assert(js.includes('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'Turnstile is loaded by the page script');
       const csp = res.headers.get('Content-Security-Policy') || '';
       assert(csp.includes('https://challenges.cloudflare.com') && !csp.includes(','), `CSP: ${csp}`);
+      assert(/img-src 'self' data: blob:;/.test(csp), `photo previews need blob: in img-src: ${csp}`);
     });
 
     console.log('Asking for a code');
@@ -157,7 +163,7 @@ async function main() {
     });
     await check('9. who am I: the signed-in number with the cookie, 401 without or with a made-up one', async () => {
       const me = await api('/api/mjeshtri/une', undefined, { cookie });
-      assert(me.status === 200 && me.data.pro.phone === '+383 44 100 200' && me.data.pro.status === 'draft', JSON.stringify(me.data));
+      assert(me.status === 200 && me.data.dashboard.phone === '+383 44 100 200' && me.data.dashboard.status === 'draft', JSON.stringify(me.data));
       assert((await api('/api/mjeshtri/une')).status === 401, 'no cookie');
       assert((await api('/api/mjeshtri/une', undefined, { cookie: `rr_mjeshtri=${'A'.repeat(43)}` })).status === 401, 'made-up cookie');
     });
@@ -218,7 +224,7 @@ async function main() {
       assert((await api('/api/mjeshtri/hyr', { phone: '044 100 200', code: '123456' }, { origin: `http://localhost.evil.example:${PORT}` })).status === 403, 'lookalike');
       assert((await api('/api/mjeshtri/kodi', 'phone=044100200', { type: 'application/x-www-form-urlencoded' })).status === 415, 'form post');
       assert((await api('/api/mjeshtri/kodi', '{"phone":"0441', {})).status === 400, 'bad JSON');
-      assert((await api('/api/mjeshtri/kodi', { phone: '044 100 200', pad: 'x'.repeat(5000) })).status === 413, 'oversized');
+      assert((await api('/api/mjeshtri/kodi', { phone: '044 100 200', pad: 'x'.repeat(9000) })).status === 413, 'oversized');
       assert((await fetch(`${BASE}/api/mjeshtri/kodi`)).status === 405, 'GET');
       assert((await fetch(`${BASE}/api/mjeshtri/une`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE }, body: '{}' })).status === 405, 'POST to une');
     });
@@ -242,14 +248,257 @@ async function main() {
       assert(sql('SELECT COUNT(*) AS n FROM sessions WHERE expires_at = 1')[0].n === 0, 'not cleaned up');
     });
 
+
+    // ---------- step 2: the dashboard ----------
+    const JPEG = readFileSync(join(root, 'scripts', 'fixtures', 'foto.jpg'));     // 480 x 360
+    const sized = (w, h) => {      // the fixture with a different size written into its frame header
+      const b = Buffer.from(JPEG);
+      for (let i = 2; i < b.length - 9; i++) {
+        if (b[i] === 0xff && b[i + 1] >= 0xc0 && b[i + 1] <= 0xc3) { b.writeUInt16BE(h, i + 5); b.writeUInt16BE(w, i + 7); return b; }
+      }
+      throw new Error('no frame header in the fixture');
+    };
+    const upload = (kind, bytes, { cookie: c = '', type = 'image/jpeg', origin = BASE } = {}) => request(`${BASE}/api/mjeshtri/foto?lloji=${kind}`, {
+      method: 'POST', headers: { 'Content-Type': type, Origin: origin, ...(c ? { Cookie: c } : {}) }, body: bytes,
+    }).then(async (res) => ({ status: res.status, data: await res.json().catch(() => null) }));
+    const me = (c) => api('/api/mjeshtri/une', undefined, { cookie: c });
+    async function newPro(phone) {
+      const e164 = normalised(phone);
+      sql(`UPDATE sms_codes SET last_sent_at = last_sent_at - 61000 WHERE phone = '${e164}'`);
+      assert((await askCode(phone)).status === 200, `code for ${phone}`);
+      const r = await signIn(phone, lastCode(e164));
+      assert(r.status === 200, `sign-in for ${phone}`);
+      return cookieOf(r.setCookie);
+    }
+    const proId = (e164) => sql(`SELECT id FROM pros WHERE phone = '${e164}'`)[0].id;
+    const FULL = { name: 'Arben Krasniqi', about: 'Punoj si hidraulik prej 15 vitesh në Prishtinë dhe rrethinë. Riparime dhe instalime.', trades: ['hidraulik', 'ngrohje-klime'], towns: ['prishtine', 'fushe-kosove'], years: 15, priceNote: 'nga 20 € / orë', whatsapp: true, viber: false };
+
+    console.log('The dashboard: profile');
+    let pro = '';
+    await check('21. a new mjeshtër sees an empty draft: required items open, counts at zero, photos enabled', async () => {
+      pro = await newPro('044 200 300');
+      const r = await me(pro);
+      const d = r.data.dashboard;
+      assert(r.status === 200 && d.status === 'draft' && d.phone === '+383 44 200 300' && d.photosEnabled === true, JSON.stringify(d));
+      assert(d.profile.name === '' && d.profile.trades.length === 0 && d.available === true, 'empty profile');
+      assert(!d.checklist.ready && d.checklist.items.filter((i) => i.required && !i.done).map((i) => i.key).join() === 'name,trades,towns,photo', JSON.stringify(d.checklist));
+      assert(d.stats.views === 0 && d.stats.calls === 0 && d.stats.whatsapp === 0 && d.stats.viber === 0 && d.stats.rating === null && d.stats.reviews === 0, JSON.stringify(d.stats));
+    });
+    await check('22. every dashboard action needs a session, comes from this site, and uses the right method', async () => {
+      const posts = [['/api/mjeshtri/profili', FULL], ['/api/mjeshtri/disponueshem', { available: false }], ['/api/mjeshtri/dergo', {}],
+        ['/api/mjeshtri/foto/fshi', { id: '00000000-0000-4000-8000-000000000000' }], ['/api/mjeshtri/foto/renditja', { ids: [] }], ['/api/mjeshtri/fshi', { confirm: 'FSHIJE' }]];
+      for (const [path, body] of posts) {
+        const r = await api(path, body);
+        assert(r.status === 401 && r.data.signedOut, `${path} without a session → ${r.status}`);
+        assert((await api(path, body, { cookie: pro, origin: 'https://evil.example' })).status === 403, `${path} cross-site`);
+        assert((await api(path, JSON.stringify(body), { cookie: pro, type: 'text/plain' })).status === 415, `${path} as text/plain`);
+        assert((await request(`${BASE}${path}`, { headers: { Cookie: pro } })).status === 405, `${path} GET`);
+      }
+      assert((await upload('pune', JPEG)).status === 401, 'upload without a session');
+      assert((await upload('pune', JPEG, { cookie: pro, origin: 'https://evil.example' })).status === 403, 'upload cross-site');
+      assert((await upload('pune', JPEG, { cookie: pro, type: 'multipart/form-data; boundary=x' })).status === 415, 'upload as a form');
+      assert(sql("SELECT COUNT(*) AS n FROM pro_photos")[0].n === 0, 'a photo was stored');
+      const [row] = sql("SELECT name, available FROM pros WHERE phone = '+38344200300'");
+      assert(row.name === '' && row.available === 1, 'something changed');
+    });
+    await check('23. saving the profile: text cleaned, lists de-duplicated, numbers parsed; the answer is what was saved', async () => {
+      const r = await api('/api/mjeshtri/profili', { ...FULL, name: '  Arben ​ Krasniqi‮ ', trades: ['hidraulik', 'hidraulik', 'ngrohje-klime'], years: '15', about: `${FULL.about}\n\n\n\nThirrni çdo ditë.` }, { cookie: pro });
+      assert(r.status === 200 && r.data.ok && r.data.message === 'U ruajt.', JSON.stringify(r.data));
+      const p = r.data.dashboard.profile;
+      assert(p.name === 'Arben Krasniqi' && p.trades.join() === 'hidraulik,ngrohje-klime' && p.years === 15 && p.whatsapp && !p.viber, JSON.stringify(p));
+      assert(p.about.endsWith('rrethinë. Riparime dhe instalime.\n\nThirrni çdo ditë.'), JSON.stringify(p.about));
+      const [row] = sql("SELECT name, trades, towns, years, price_note FROM pros WHERE phone = '+38344200300'");
+      assert(row.trades === '["hidraulik","ngrohje-klime"]' && row.towns === '["prishtine","fushe-kosove"]' && row.price_note === 'nga 20 € / orë', JSON.stringify(row));
+    });
+    await check('24. invalid fields: each one named, nothing saved', async () => {
+      const bad = { name: 'Arben <script>', about: 'x'.repeat(601), trades: ['hidraulik', 'elektricist', 'bojaxhi', 'pllakaxhi', 'murator', 'kulmi'], towns: ['prishtine', 'atlantis'], years: 61, priceNote: 'x'.repeat(61) };
+      const r = await api('/api/mjeshtri/profili', bad, { cookie: pro });
+      assert(r.status === 400 && Object.keys(r.data.errors).sort().join() === 'about,name,priceNote,towns,trades,years', JSON.stringify(r.data));
+      assert((await api('/api/mjeshtri/profili', { ...FULL, years: 'pesë' }, { cookie: pro })).data.errors.years, 'years as words');
+      assert((await api('/api/mjeshtri/profili', { ...FULL, trades: 'hidraulik' }, { cookie: pro })).data.errors.trades, 'trades not a list');
+      assert((await api('/api/mjeshtri/profili', { ...FULL, towns: Array(11).fill(0).map((_, i) => ['prishtine', 'prizren', 'ferizaj', 'peje', 'gjakove', 'gjilan', 'podujeve', 'mitrovice', 'vushtrri', 'suhareke', 'rahovec'][i]) }, { cookie: pro })).data.errors.towns, '11 towns');
+      assert(sql("SELECT name FROM pros WHERE phone = '+38344200300'")[0].name === 'Arben Krasniqi', 'saved anyway');
+    });
+    await check('25. sending for approval without a profile photo: refused, the missing item named', async () => {
+      const r = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
+      assert(r.status === 400 && r.data.missing.join() === 'photo', JSON.stringify(r.data));
+      assert(sql("SELECT status FROM pros WHERE phone = '+38344200300'")[0].status === 'draft', 'status changed');
+    });
+
+    console.log('The dashboard: photos');
+    let profilePhoto = null;
+    await check('26. profile photo: stored in R2, served as a sandboxed JPEG cached for a year, 304 when unchanged', async () => {
+      const r = await upload('profili', JPEG, { cookie: pro });
+      assert(r.status === 200 && r.data.photo && r.data.dashboard.photos.profile.id === r.data.photo.id, JSON.stringify(r.data));
+      profilePhoto = r.data.photo;
+      assert(profilePhoto.url === `/foto/${profilePhoto.id}.jpg` && profilePhoto.width === 480 && profilePhoto.height === 360, JSON.stringify(profilePhoto));
+      const res = await request(`${BASE}${profilePhoto.url}`);
+      const body = Buffer.from(await res.arrayBuffer());
+      assert(res.status === 200 && body.equals(JPEG), `status ${res.status}, ${body.length} bytes`);
+      const h = (k) => res.headers.get(k) || '';
+      assert(h('Content-Type') === 'image/jpeg' && h('X-Content-Type-Options') === 'nosniff' && /immutable/.test(h('Cache-Control')) && /sandbox/.test(h('Content-Security-Policy')) && h('ETag'), JSON.stringify(Object.fromEntries(res.headers)));
+      assert(h('Last-Modified') && h('Content-Length') === String(JPEG.length), 'Last-Modified / Content-Length');
+      const status = async (headers, method = 'GET') => (await request(`${BASE}${profilePhoto.url}`, { method, headers })).status;
+      assert(await status({ 'If-None-Match': h('ETag') }) === 304, 'no 304');
+      assert(await status({ 'If-None-Match': `W/${h('ETag')}, "other"` }) === 304, 'no 304 for a weak ETag in a list');
+      assert(await status({ 'If-None-Match': '"other"' }) === 200, 'a stale ETag got 304');
+      // Malformed or other conditional headers are ignored rather than crashing or faking a 304.
+      assert(await status({ 'If-None-Match': h('ETag').replace(/"/g, '') }) === 200, 'unquoted ETag');
+      assert(await status({ 'If-Match': '"nope"' }) === 200 && await status({ 'If-Match': 'nope' }) === 200, 'If-Match');
+      assert(await status({ 'If-Unmodified-Since': 'Mon, 01 Jan 2001 00:00:00 GMT' }) === 200, 'If-Unmodified-Since');
+      const head = await request(`${BASE}${profilePhoto.url}`, { method: 'HEAD' });
+      assert(head.status === 200 && head.headers.get('Content-Length') === String(JPEG.length) && (await head.arrayBuffer()).byteLength === 0, `HEAD ${head.status}`);
+      assert(await status({ 'If-None-Match': h('ETag') }, 'HEAD') === 304, 'HEAD: no 304');
+      assert((await request(`${BASE}${profilePhoto.url}`, { method: 'POST' })).status === 405, 'POST to a photo');
+      for (const path of ['/foto/nope.jpg', '/foto/00000000-0000-4000-8000-000000000000.jpg', `/foto/${profilePhoto.id.toUpperCase()}.jpg`, `/foto/${profilePhoto.id}.jpg.png`]) {
+        assert((await request(`${BASE}${path}`)).status === 404, `${path} found`);
+      }
+    });
+    await check('27. uploads that are not our JPEGs: refused, nothing stored', async () => {
+      const before = sql('SELECT COUNT(*) AS n FROM pro_photos')[0].n;
+      const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+      for (const [what, bytes, kind] of [['a PNG', png, 'pune'], ['text', Buffer.from('hello'), 'pune'], ['an empty body', Buffer.alloc(0), 'pune'],
+        ['too small (150 px)', sized(150, 150), 'pune'], ['too large (4000 px)', sized(4000, 3000), 'pune'], ['an unknown kind', JPEG, 'tjeter']]) {
+        const r = await upload(kind, bytes, { cookie: pro });
+        assert(r.status === 400 && !r.data.ok, `${what} → ${r.status}`);
+      }
+      const big = Buffer.concat([JPEG, Buffer.alloc(2 * 1024 * 1024)]);
+      assert((await upload('pune', big, { cookie: pro })).status === 413, 'over 2 MB');
+      // Without a Content-Length (sent in chunks) the server stops reading once it passes 2 MB.
+      const chunked = await request(`${BASE}/api/mjeshtri/foto?lloji=pune`, {
+        method: 'POST', headers: { 'Content-Type': 'image/jpeg', Origin: BASE, Cookie: pro }, duplex: 'half',
+        body: new ReadableStream({ start(c) { c.enqueue(new Uint8Array(JPEG)); for (let i = 0; i < 5; i++) c.enqueue(new Uint8Array(512 * 1024)); c.close(); } }),
+      });
+      assert(chunked.status === 413, `chunked over 2 MB → ${chunked.status}`);
+      // Local only: after a Worker stops reading a body, wrangler dev's proxy fails the next request with a 500.
+      const absorbed = await request(`${BASE}/api/mjeshtri/une`, { headers: { Cookie: pro } });
+      if (absorbed.status !== 200) assert((await me(pro)).status === 200, 'the server did not recover after the refused upload');
+      assert(sql('SELECT COUNT(*) AS n FROM pro_photos')[0].n === before, 'something was stored');
+    });
+    await check('28. a new profile photo replaces the old one, which is deleted from R2', async () => {
+      const r = await upload('profili', JPEG, { cookie: pro });
+      assert(r.status === 200 && r.data.photo.id !== profilePhoto.id, `status ${r.status}`);
+      assert((await request(`${BASE}${profilePhoto.url}`)).status === 404, 'old photo still served');
+      assert(sql(`SELECT COUNT(*) AS n FROM pro_photos WHERE kind = 'profile' AND pro_id = '${proId('+38344200300')}'`)[0].n === 1, 'two profile photos');
+      profilePhoto = r.data.photo;
+    });
+    let work = [];
+    await check('29. work photos: twelve at most; the thirteenth is refused and not stored', async () => {
+      for (let i = 0; i < 12; i++) {
+        const r = await upload('pune', JPEG, { cookie: pro });
+        assert(r.status === 200, `photo ${i + 1} → ${r.status} ${JSON.stringify(r.data)}`);
+        work = r.data.dashboard.photos.work;
+      }
+      assert(work.length === 12, `${work.length} work photos`);
+      const r = await upload('pune', JPEG, { cookie: pro });
+      assert(r.status === 400 && r.data.message.includes('12'), `13th → ${r.status}`);
+      assert(sql("SELECT COUNT(*) AS n FROM pro_photos WHERE kind = 'work'")[0].n === 12, 'stored anyway');
+    });
+    await check('30. ordering work photos: any order of exactly my photos; anything else refused', async () => {
+      const ids = work.map((p) => p.id).reverse();
+      const r = await api('/api/mjeshtri/foto/renditja', { ids }, { cookie: pro });
+      assert(r.status === 200 && r.data.dashboard.photos.work.map((p) => p.id).join() === ids.join(), 'order not saved');
+      for (const bad of [ids.slice(1), [...ids.slice(1), profilePhoto.id], [...ids.slice(1), ids[1]], 'x', [...ids, ids[0]]]) {
+        assert((await api('/api/mjeshtri/foto/renditja', { ids: bad }, { cookie: pro })).status === 400, `accepted ${JSON.stringify(bad).slice(0, 40)}`);
+      }
+      work = r.data.dashboard.photos.work;
+    });
+    let other = '';
+    await check("31. deleting a photo: gone from R2 and the list; someone else's photo can't be deleted", async () => {
+      other = await newPro('044 200 301');
+      const theirs = (await upload('pune', JPEG, { cookie: other })).data.photo;
+      const r1 = await api('/api/mjeshtri/foto/fshi', { id: theirs.id }, { cookie: pro });
+      assert(r1.status === 404, `deleted someone else's photo: ${r1.status}`);
+      assert((await request(`${BASE}${theirs.url}`)).status === 200, 'their photo is gone');
+      const victim = work[0];
+      const r2 = await api('/api/mjeshtri/foto/fshi', { id: victim.id }, { cookie: pro });
+      assert(r2.status === 200 && r2.data.dashboard.photos.work.length === 11, `status ${r2.status}`);
+      assert((await request(`${BASE}${victim.url}`)).status === 404, 'still served');
+      assert((await api('/api/mjeshtri/foto/fshi', { id: victim.id }, { cookie: pro })).status === 404, 'deleted twice');
+      assert((await api('/api/mjeshtri/foto/fshi', { id: "x' OR 1=1 --" }, { cookie: pro })).status === 404, 'odd id');
+    });
+    await check('32. at most 60 uploads a day per mjeshtër', async () => {
+      const bucket = await hmac(SECRET, 'photo-upload', proId('+38344200301'));
+      const now = Date.now();
+      sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 60 }, (_, i) => `('${bucket}', ${now - i * 1000})`).join(', ')}`);
+      const r = await upload('pune', JPEG, { cookie: other });
+      assert(r.status === 429 && r.data.message.includes('nesër'), `status ${r.status}`);
+    });
+
+    console.log('The dashboard: approval, availability, account');
+    await check('33. sending a complete profile: pending, and saying so again is harmless; edits keep it pending', async () => {
+      const r = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
+      assert(r.status === 200 && r.data.dashboard.status === 'pending' && r.data.dashboard.submittedAt > 0, JSON.stringify(r.data));
+      const again = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
+      assert(again.status === 200 && again.data.dashboard.status === 'pending', `again: ${again.status}`);
+      const edit = await api('/api/mjeshtri/profili', { ...FULL, years: 16 }, { cookie: pro });
+      assert(edit.status === 200 && edit.data.dashboard.status === 'pending', 'edit changed the status');
+    });
+    await check('34. rejected with a reason: shown, and sending again clears it', async () => {
+      sql("UPDATE pros SET status = 'rejected', status_note = 'Fotoja e profilit nuk duket qartë.' WHERE phone = '+38344200300'");
+      const d = (await me(pro)).data.dashboard;
+      assert(d.status === 'rejected' && d.statusNote === 'Fotoja e profilit nuk duket qartë.', JSON.stringify(d));
+      const r = await api('/api/mjeshtri/dergo', {}, { cookie: pro });
+      assert(r.status === 200 && r.data.dashboard.status === 'pending' && r.data.dashboard.statusNote === '', JSON.stringify(r.data.dashboard));
+    });
+    await check('35. "Marr punë tani" switch: saved; anything but true/false refused', async () => {
+      const off = await api('/api/mjeshtri/disponueshem', { available: false }, { cookie: pro });
+      assert(off.status === 200 && off.data.dashboard.available === false, JSON.stringify(off.data));
+      assert(sql("SELECT available FROM pros WHERE phone = '+38344200300'")[0].available === 0, 'not saved');
+      assert((await api('/api/mjeshtri/disponueshem', { available: 'po' }, { cookie: pro })).status === 400, 'accepted a string');
+      assert((await api('/api/mjeshtri/disponueshem', { available: true }, { cookie: pro })).data.dashboard.available === true, 'back on');
+    });
+    await check('36. Ballina counts: the last 30 days only', async () => {
+      const id = proId('+38344200300');
+      const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+      sql(`INSERT INTO pro_stats_daily (pro_id, day, views, calls, whatsapp, viber) VALUES ('${id}', '${day(0)}', 10, 3, 2, 1), ('${id}', '${day(29)}', 5, 1, 0, 0), ('${id}', '${day(31)}', 100, 100, 100, 100)`);
+      const s = (await me(pro)).data.dashboard.stats;
+      assert(s.days === 30 && s.views === 15 && s.calls === 4 && s.whatsapp === 2 && s.viber === 1, JSON.stringify(s));
+    });
+    await check('37. suspended: can look, sign out and delete, but not edit, upload or send', async () => {
+      sql("UPDATE pros SET status = 'suspended', status_note = 'Ankesa nga klientët.' WHERE phone = '+38344200301'");
+      assert((await me(other)).data.dashboard.status === 'suspended', 'status');
+      assert((await api('/api/mjeshtri/profili', FULL, { cookie: other })).status === 403, 'edit');
+      assert((await api('/api/mjeshtri/dergo', {}, { cookie: other })).status === 403, 'send');
+      assert((await api('/api/mjeshtri/disponueshem', { available: true }, { cookie: other })).status === 403, 'switch');
+      sql(`DELETE FROM rate_events WHERE bucket = '${await hmac(SECRET, 'photo-upload', proId('+38344200301'))}'`);
+      assert((await upload('pune', JPEG, { cookie: other })).status === 403, 'upload');
+    });
+    await check('38. sign out everywhere: every session of this mjeshtër ends, nobody else\'s', async () => {
+      const second = await newPro('044 200 300');
+      const r = await api('/api/mjeshtri/dil', { all: true }, { cookie: second });
+      assert(r.status === 200 && /Max-Age=0/.test(r.setCookie), r.setCookie);
+      assert((await me(pro)).status === 401 && (await me(second)).status === 401, 'still signed in somewhere');
+      assert((await me(other)).status === 200, "someone else's session ended");
+      pro = await newPro('044 200 300');
+    });
+    await check('39. deleting the account: needs the confirmation word; then the profile, photos (R2 too), counts and sessions are gone', async () => {
+      const id = proId('+38344200300');
+      const urls = sql(`SELECT id FROM pro_photos WHERE pro_id = '${id}'`).map((r) => `/foto/${r.id}.jpg`);
+      assert(urls.length === 12, `${urls.length} photos before`);
+      assert((await api('/api/mjeshtri/fshi', {}, { cookie: pro })).status === 400, 'deleted without the word');
+      const r = await api('/api/mjeshtri/fshi', { confirm: 'FSHIJE' }, { cookie: pro });
+      assert(r.status === 200 && /Max-Age=0/.test(r.setCookie), `status ${r.status}`);
+      for (const table of ['pros', 'pro_photos', 'pro_stats_daily']) {
+        const col = table === 'pros' ? 'id' : 'pro_id';
+        assert(sql(`SELECT COUNT(*) AS n FROM ${table} WHERE ${col} = '${id}'`)[0].n === 0, `${table} still has rows`);
+      }
+      assert(sql(`SELECT COUNT(*) AS n FROM sessions WHERE subject = '${id}'`)[0].n === 0, 'sessions left');
+      for (const u of urls) assert((await request(`${BASE}${u}`)).status === 404, `${u} still served`);
+      assert((await me(pro)).status === 401, 'still signed in');
+      assert((await me(other)).status === 200, "someone else's account is affected");
+      const again = await newPro('044 200 300');
+      assert((await me(again)).data.dashboard.profile.name === '', 'signing in again starts a fresh, empty account');
+    });
+
     console.log('Production settings');
-    await check('19. live site: no code ever sent without the SMS and bot-check secrets; the cookie is Secure', async () => {
+    await check('40. live site: no code ever sent without the SMS and bot-check secrets; the cookie is Secure', async () => {
       const { getPlatformProxy } = await import('wrangler');
       const { kodi, hyr } = await import('../functions/api/mjeshtri.js');
       const proxy = await getPlatformProxy({ persist: false });
       try {
         const db = proxy.env.DB;
-        for (const f of ['0001_subscribers.sql', '0002_mjeshtrit.sql']) {
+        for (const f of ['0001_subscribers.sql', '0002_mjeshtrit.sql', '0003_paneli.sql']) {
           const schema = readFileSync(join(root, 'migrations', f), 'utf8');
           for (const stmt of schema.replace(/--.*$/gm, '').split(';').map((x) => x.trim()).filter(Boolean)) await db.prepare(stmt).run();
         }
@@ -268,7 +517,7 @@ async function main() {
         await proxy.dispose();
       }
     });
-    await check('20. logs contain no phone numbers or codes', async () => {
+    await check('41. logs contain no phone numbers or codes', async () => {
       assert(!/\+?383\s?4\d|04\d\s?\d{3}/.test(devLog), 'a phone number appears in the logs');
       for (const m of sms) {
         const code = (m.Body.match(/^(\d{6}) /) || [])[1];

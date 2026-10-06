@@ -20,7 +20,7 @@ directory = "dist"
 binding = "ASSETS"
 not_found_handling = "404-page"
 # These paths always reach the Worker, even if a static file with the same name ever appears.
-run_worker_first = ["/api/*", "/konfirmo", "/konfirmo/", "/cregjistrohu", "/cregjistrohu/"]
+run_worker_first = ["/api/*", "/foto/*", "/konfirmo", "/konfirmo/", "/cregjistrohu", "/cregjistrohu/"]
 
 [observability]
 enabled = true
@@ -48,8 +48,14 @@ database_name = "rregullo-launch"
 database_id = "ba8344e4-92f6-4d54-b9cd-e39c6e847caf"
 migrations_dir = "migrations"
 
+# Mjeshtër photos (step 2). R2 must be enabled on the Cloudflare account (dashboard > R2); the first deploy then
+# creates the bucket by itself. Free up to 10 GB.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "rregullo-foto"
+
 # Worker Previews: Cloudflare's builds for branches other than main run `npx wrangler preview`, which needs this
-# block. Previews don't inherit the settings above, and this block deliberately gives them no database, variables
-# or secrets: a preview shows the pages, while the signup and the mjeshtër sign-in answer with an error there
+# block. Previews don't inherit the settings above, and this block deliberately gives them no database, photo storage,
+# variables or secrets: a preview shows the pages, while the signup and the mjeshtër sign-in answer with an error there
 # instead of touching the real list. With `preview_urls = false` above, previews get no public URL either.
 [previews]

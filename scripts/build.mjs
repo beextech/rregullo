@@ -126,7 +126,9 @@ for (const file of gamePages) {
 // /mjeshtri: the mjeshtër panel. Its own CSS and JS get cache-busting hashes; Turnstile only when a site key is set.
 const proPages = ['mjeshtri/index.html'].filter((f) => existsSync(join(dist, f)));
 const appCssHash = hash('mjeshtri/mjeshtri.css');
-const appJsHash = hash('mjeshtri/mjeshtri.js');
+// The entry script imports the panel's other modules; its hash covers all of them, so any change gives a new URL.
+const appJsHash = createHash('sha256').update(readdirSync(join(src, 'mjeshtri')).filter((f) => f.endsWith('.js')).sort()
+  .map((f) => readFileSync(join(src, 'mjeshtri', f))).join('\0')).digest('hex').slice(0, 10);
 for (const file of proPages) {
   const html = blocks(readFileSync(join(dist, file), 'utf8'), { turnstile: Boolean(turnstileSiteKey) });
   writeFileSync(join(dist, file), common(html)

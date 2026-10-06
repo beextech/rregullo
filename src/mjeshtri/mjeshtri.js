@@ -90,6 +90,7 @@ phoneForm.addEventListener('submit', async (e) => {
     return;
   }
   const human = phoneForm.querySelector('[name="cf-turnstile-response"]');
+  if (humanWidget === null) loadHumanCheck();   // the check's script failed to load before: try again
   busy(phoneForm, true);
   const { data } = await api('/api/mjeshtri/kodi', { phone, turnstile: human ? human.value : '' });
   busy(phoneForm, false);
@@ -188,7 +189,11 @@ function signedOut(message) {
 }
 
 // The server ended the session (expired, or "sign out everywhere" on another phone), or the dashboard signed out.
-window.addEventListener('rr:signedout', () => signedOut('Nuk je më i kyçur. Hyr prapë me numrin e telefonit.'));
+// A 401 before the dashboard is open (the first visit, or the start-up check) is just "not signed in yet".
+const appView = document.querySelector('[data-view="app"]');
+window.addEventListener('rr:signedout', () => {
+  if (!appView.hidden) signedOut('Nuk je më i kyçur. Hyr prapë me numrin e telefonit.');
+});
 window.addEventListener('rr:left', (e) => signedOut(e.detail && e.detail.message));
 
 // ---------- start ----------

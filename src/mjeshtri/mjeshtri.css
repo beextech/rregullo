@@ -39,7 +39,7 @@
 
 /* Buttons the dashboard adds to site.css */
 .btn { border: 0; cursor: pointer; font-family: inherit; }
-.btn:disabled { cursor: default; opacity: .55; }
+.btn:disabled, .btn[aria-disabled="true"]:not(.is-busy) { cursor: default; opacity: .55; }
 .btn:disabled:active { transform: none; }
 .btn-ghost { background: transparent; color: var(--paper); box-shadow: inset 0 0 0 1px var(--line-strong); justify-content: center; }
 .btn-ghost:hover { background: rgba(241, 242, 239, .06); box-shadow: inset 0 0 0 1px rgba(171, 226, 63, .55); }
@@ -261,7 +261,7 @@
 .photo-pick.is-disabled { opacity: .5; pointer-events: none; }
 .photo-input:focus-visible + .photo-pick { outline: 2px solid var(--lime); outline-offset: 3px; }
 .photo-status { margin-top: 10px; color: var(--soft); font-size: 14px; }
-.photo-status:empty, .photo-status:not(:has(span:not(:empty))) { display: none; }
+.photo-status:empty { margin-top: 0; }   /* stays rendered: an empty live region must exist before its message */
 .photo-status span + span:not(:empty) { margin-left: 6px; font-variant-numeric: tabular-nums; }
 
 .work-grid { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 16px 0 0; padding: 0; }
@@ -306,6 +306,13 @@
 }
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
 @media (min-width: 760px) { .toast { bottom: 32px; } }
+
+/* Below 760 px the tab bar (and on Profili the save bar) cover the bottom of the screen: keep focused fields above them. */
+@media (max-width: 759px) {
+  html { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  html.on-profili { scroll-padding-bottom: calc(164px + env(safe-area-inset-bottom)); }
+  html.on-profili .toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+}
 
 @media (max-width: 480px) {
   .account-actions .btn { width: 100%; }

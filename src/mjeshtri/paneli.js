@@ -15,7 +15,10 @@ let dash = null;          // the last dashboard state from the server
 let isOpen = false;
 let current = '';
 let saved = '';           // the profile form as last loaded or saved (JSON), to spot unsaved changes
-const pending = [];       // work photos on their way up: { id, url, label, progress }
+let saving = false;       // a profile save is on its way
+let draft = null;         // unsaved profile changes kept over a sign-out in this tab: { phone, form }
+const pending = [];       // work photos waiting or on their way up, oldest first: { file, url, label }
+let pumping = false;      // the upload queue is running
 
 // ---------- small helpers ----------
 
@@ -24,10 +27,13 @@ function setError(el, message) {
   el.hidden = !message;
 }
 
+// While a request runs, the button shows a spinner and ignores taps. It stays focusable (aria-disabled rather than
+// disabled), so keyboard and screen-reader focus isn't thrown back to the top of the page.
 function busy(btn, on) {
-  btn.disabled = on;
   btn.classList.toggle('is-busy', on);
+  if (on) btn.setAttribute('aria-disabled', 'true'); else btn.removeAttribute('aria-disabled');
 }
+const isBusy = (btn) => btn.classList.contains('is-busy');
 
 let toastTimer = 0;
 function toast(message) {
@@ -77,6 +83,7 @@ const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash
 function showTab(tab, focus) {
   current = tab;
   document.title = `${TAB_NAMES[tab]} · ${PAGE_TITLE}`;
+  document.documentElement.classList.toggle('on-profili', tab === 'profili');
   for (const s of document.querySelectorAll('[data-section]')) s.hidden = s.dataset.section !== tab;
   for (const a of document.querySelectorAll('[data-tab]')) {
     if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
@@ -119,17 +126,30 @@ function focusField(id) {
 export function openDashboard(state, { fresh }) {
   isOpen = true;
   apply(state, { refill: true });
+  // Changes not saved before a sign-out (or an expired session) come back, still marked as unsaved.
+  if (draft && draft.phone === state.phone && state.status !== 'suspended') {
+    setForm(draft.form);
+    renderTownChips();
+    onFormChange();
+  }
+  draft = null;
   showTab(tabFromHash(), fresh);
 }
 
 export function closeDashboard() {
+  if (dash && dirty()) draft = { phone: dash.phone, form: readForm() };
   isOpen = false;
   dash = null;
   saved = '';
   pending.length = 0;
   profileForm.reset();
+  for (const label of $('#f-towns-list').children) label.hidden = false;
+  $('#f-towns-empty').hidden = true;
+  for (const id of ['avatar-status', 'avatar-progress', 'work-status']) document.getElementById(id).textContent = '';
+  for (const id of ['submit-error', 'signout-error', 'profile-error']) setError(document.getElementById(id), '');
   for (const d of document.querySelectorAll('dialog[open]')) d.close();
   document.title = PAGE_TITLE;
+  document.documentElement.classList.remove('on-profili');
   if (location.hash) history.replaceState(null, '', location.pathname);
 }
 
@@ -235,13 +255,16 @@ function renderBallina() {
 
 $('#available').addEventListener('click', async (e) => {
   const sw = e.currentTarget;
-  const next = !dash.available;
-  sw.setAttribute('aria-checked', String(next));
-  sw.disabled = true;
-  const { data } = await api('/api/mjeshtri/disponueshem', { available: next });
-  sw.disabled = false;
+  if (sw.getAttribute('aria-busy') === 'true') return;
+  const before = dash.available;
+  sw.setAttribute('aria-checked', String(!before));
+  sw.setAttribute('aria-busy', 'true');
+  const { data } = await api('/api/mjeshtri/disponueshem', { available: !before });
+  sw.removeAttribute('aria-busy');
+  if (!isOpen) return;
+  const next = !before;
   if (!data.ok) {
-    sw.setAttribute('aria-checked', String(dash.available));
+    sw.setAttribute('aria-checked', String(before));
     toast(data.message || GENERIC);
     return;
   }
@@ -251,6 +274,7 @@ $('#available').addEventListener('click', async (e) => {
 
 $('#submit').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
+  if (isBusy(btn)) return;
   setError($('#submit-error'), '');
   busy(btn, true);
   // The checklist shows what is saved, so unsaved profile changes are saved first.
@@ -267,6 +291,7 @@ $('#submit').addEventListener('click', async (e) => {
   }
   const { data } = await api('/api/mjeshtri/dergo', {});
   busy(btn, false);
+  if (!isOpen) return;
   if (!data.ok) { setError($('#submit-error'), data.message || GENERIC); return; }
   apply(data.dashboard);
   toast(data.message);
@@ -320,16 +345,20 @@ function readForm() {
   };
 }
 
-function fillForm(p) {
+function setForm(p) {
   $('#f-name').value = p.name;
   $('#f-about').value = p.about;
   for (const b of tradeBoxes) b.checked = p.trades.includes(b.value);
   townOrder = p.towns.filter((t) => townBoxes.some((b) => b.value === t));
   for (const b of townBoxes) b.checked = townOrder.includes(b.value);
-  $('#f-years').value = p.years === null ? '' : String(p.years);
+  $('#f-years').value = p.years === null || p.years === undefined ? '' : String(p.years);
   $('#f-price').value = p.priceNote;
   $('#f-whatsapp').checked = p.whatsapp;
   $('#f-viber').checked = p.viber;
+}
+
+function fillForm(p) {
+  setForm(p);
   saved = JSON.stringify(readForm());
   clearFieldErrors();
   renderTownChips();
@@ -412,7 +441,10 @@ $('#f-years').addEventListener('input', (e) => { e.target.value = e.target.value
 
 function renderSaveState() {
   const isDirty = dirty();
-  $('#save').disabled = !isDirty || (dash && dash.status === 'suspended');
+  const save = $('#save');
+  if (dash && dash.status === 'suspended') save.disabled = true;
+  else if (saving || !isDirty) save.setAttribute('aria-disabled', 'true');
+  else save.removeAttribute('aria-disabled');
   const text = isDirty ? 'Ndryshime të paruajtura' : 'Gjithçka është ruajtur';
   if ($('#save-state').textContent !== text) $('#save-state').textContent = text;
   $('#save-bar').classList.toggle('is-dirty', isDirty);
@@ -441,8 +473,10 @@ function clearFieldErrors() {
 // Saves the profile form. On errors they are shown by their fields, and the first one gets focus (on Profili,
 // switching there if needed). Resolves true when saved.
 async function saveForm() {
+  if (saving) return false;
   clearFieldErrors();
   const body = readForm();
+  const sent = JSON.stringify(body);
   const showOnProfili = (id) => {
     if (current === 'profili') focusField(id);
     else { focusAfterRoute = id; location.hash = '#profili'; }
@@ -454,11 +488,14 @@ async function saveForm() {
     return false;
   }
   const btn = $('#save');
+  saving = true;
   busy(btn, true);
   const { data } = await api('/api/mjeshtri/profili', body);
-  btn.classList.remove('is-busy');
+  saving = false;
+  busy(btn, false);
+  if (!isOpen) return false;
   if (!data.ok) {
-    btn.disabled = false;
+    renderSaveState();
     if (data.errors) {
       let first = null;
       for (const [field, message] of Object.entries(data.errors)) {
@@ -475,14 +512,17 @@ async function saveForm() {
     }
     return false;
   }
-  apply(data.dashboard, { refill: true });
+  // Anything typed while the save was on its way stays in the form, still marked as unsaved.
+  const typedSince = JSON.stringify(readForm()) !== sent;
+  if (typedSince) saved = sent;
+  apply(data.dashboard, { refill: !typedSince });
   toast(data.message || 'U ruajt.');
   return true;
 }
 
 profileForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  saveForm();
+  if (dirty()) saveForm();
 });
 
 // ---------- the preview ----------
@@ -517,6 +557,7 @@ const PHOTO_ERRORS = {
   unreadable: 'Kjo foto nuk u hap. Zgjidh një foto JPG ose PNG.',
   too_small: 'Kjo foto është shumë e vogël. Zgjidh një foto më të madhe.',
   too_big: 'Kjo foto është shumë e madhe. Zgjidh një foto tjetër.',
+  too_wide: 'Kjo foto është shumë e gjatë dhe e ngushtë. Zgjidh një foto tjetër.',
 };
 
 function renderPhotos() {
@@ -600,57 +641,65 @@ $('#avatar-input').addEventListener('change', async (e) => {
   toast('Foto e profilit u ruajt.');
 });
 
-$('#work-input').addEventListener('change', async (e) => {
+// Work photos go up one at a time from a single queue, so picking more while some are uploading just adds to it.
+$('#work-input').addEventListener('change', (e) => {
   const files = [...(e.target.files || [])];
   e.target.value = '';
   if (!files.length) return;
-  const status = $('#work-status');
   const room = 12 - dash.photos.work.length - pending.length;
   const take = files.slice(0, Math.max(0, room));
-  status.textContent = files.length > take.length ? `U zgjodhën vetëm ${take.length} nga ${files.length}: ka vend për 12 foto.` : '';
-  const jobs = take.map((file, i) => ({ id: `${Date.now()}-${i}`, file, url: '', label: 'Në pritje…' }));
-  pending.push(...jobs);
+  $('#work-status').textContent = files.length > take.length ? `U zgjodhën vetëm ${take.length} nga ${files.length}: ka vend për 12 foto.` : '';
+  pending.push(...take.map((file) => ({ file, url: '', label: 'Në pritje…' })));
   renderPhotos();
+  uploadQueue();
+});
+
+async function uploadQueue() {
+  if (pumping) return;
+  pumping = true;
+  let ok = 0;
   let failed = 0;
   let lastError = '';
-  for (const job of jobs) {
+  while (pending.length && isOpen) {
+    const job = pending[0];
     job.label = 'Po përgatitet…';
     renderPhotos();
     let blob = null;
     try {
-      ({ blob } = await shrinkPhoto(job.file, { maxEdge: 1600, minEdge: 300 }));
+      ({ blob } = await shrinkPhoto(job.file, { maxEdge: 1600, minEdge: 300, minOutEdge: 200, maxOutEdge: 2048 }));
     } catch (err) {
       lastError = photoMessage(err);
     }
+    if (!isOpen) break;
+    let data = null;
     if (blob) {
       job.url = URL.createObjectURL(blob);
-      const { data } = await uploadJpeg('/api/mjeshtri/foto?lloji=pune', blob, (f) => {
+      job.label = '0%';
+      renderPhotos();
+      ({ data } = await uploadJpeg('/api/mjeshtri/foto?lloji=pune', blob, (f) => {
         job.label = `${Math.round(f * 100)}%`;
         const tile = $('#work-grid .is-pending .work-progress');
         if (tile && pending[0] === job) tile.textContent = job.label;
-      });
-      URL.revokeObjectURL(job.url);
-      pending.splice(pending.indexOf(job), 1);
-      if (data.ok) { apply(data.dashboard); continue; }
-      lastError = data.message || GENERIC;
-      if (data.signedOut) break;
-    } else {
-      pending.splice(pending.indexOf(job), 1);
+      }));
     }
-    failed++;
-    renderPhotos();
+    const at = pending.indexOf(job);
+    if (at !== -1) pending.splice(at, 1);
+    if (!isOpen || (data && data.signedOut)) { if (job.url) URL.revokeObjectURL(job.url); break; }
+    if (data && data.ok) { ok++; apply(data.dashboard); } else { failed++; if (data) lastError = data.message || GENERIC; renderPhotos(); }
+    if (job.url) URL.revokeObjectURL(job.url);
   }
-  pending.length = 0;
-  if (dash) renderPhotos();
-  const ok = take.length - failed;
-  if (failed) status.textContent = `${ok ? `U shtuan ${ok} foto. ` : ''}${failed === 1 ? 'Një foto nuk u shtua' : `${failed} foto nuk u shtuan`}: ${lastError}`;
+  pumping = false;
+  if (!isOpen) return;
+  renderPhotos();
+  if (failed) $('#work-status').textContent = `${ok ? `U shtuan ${ok} foto. ` : ''}${failed === 1 ? 'Një foto nuk u shtua' : `${failed} foto nuk u shtuan`}: ${lastError}`;
   else if (ok) toast(ok === 1 ? 'Fotoja u shtua.' : `U shtuan ${ok} foto.`);
-});
+}
 
 // One work photo, in a dialog: move it or delete it.
 const sheet = $('#photo-sheet');
 let sheetIndex = -1;
 let sheetOpener = null;
+let sheetBusy = false;    // a move or delete is on its way; further taps wait for it
 
 function openSheet(i) {
   sheetIndex = i;
@@ -664,7 +713,13 @@ function openSheet(i) {
   sheet.querySelector('[data-photo="right"]').disabled = i === work.length - 1;
   askDelete(false);
   setError($('#photo-sheet-error'), '');
+  // The button just used may now be disabled (the photo reached an end): keep focus inside the sheet.
+  if (sheet.open && (document.activeElement === document.body || document.activeElement.disabled)) {
+    const next = [...sheet.querySelectorAll('.sheet-actions [data-photo]')].find((b) => !b.disabled);
+    (next || sheet.querySelector('[data-photo="close"]')).focus();
+  }
   if (!sheet.open) {
+    $('#photo-sheet-status').textContent = '';
     if (typeof sheet.showModal === 'function') sheet.showModal(); else sheet.setAttribute('open', '');
   }
 }
@@ -695,7 +750,7 @@ sheet.addEventListener('close', () => {
 
 sheet.addEventListener('click', async (e) => {
   const action = e.target.closest('[data-photo]')?.dataset.photo;
-  if (!action) return;
+  if (!action || (sheetBusy && action !== 'close')) return;
   if (action === 'close') { closeSheet(); return; }
   if (action === 'delete') { askDelete(true); return; }
   if (action === 'keep') { askDelete(false); sheet.querySelector('[data-photo="delete"]').focus(); return; }
@@ -703,7 +758,10 @@ sheet.addEventListener('click', async (e) => {
   const i = sheetIndex;
   let to = i;
   if (action === 'delete-yes') {
+    sheetBusy = true;
     const { data } = await api('/api/mjeshtri/foto/fshi', { id: ids[i] });
+    sheetBusy = false;
+    if (!isOpen) return;
     if (!data.ok) { setError($('#photo-sheet-error'), data.message || GENERIC); return; }
     apply(data.dashboard);
     sheetOpener = null;
@@ -717,12 +775,17 @@ sheet.addEventListener('click', async (e) => {
   if (to < 0 || to >= ids.length || to === i) return;
   const [moved] = ids.splice(i, 1);
   ids.splice(to, 0, moved);
+  sheetBusy = true;
   const { data } = await api('/api/mjeshtri/foto/renditja', { ids });
+  sheetBusy = false;
+  if (!isOpen) return;
   if (!data.ok) { setError($('#photo-sheet-error'), data.message || GENERIC); return; }
   apply(data.dashboard);
   sheetOpener = { dataset: { index: String(to) } };
+  if (!sheet.open) return;
   openSheet(to);
-  toast(to === 0 ? 'Tani është fotoja e parë.' : `Tani është fotoja ${to + 1}.`);
+  // Said inside the sheet: while it is open, the page's toast is out of reach for screen readers.
+  $('#photo-sheet-status').textContent = to === 0 ? 'Tani është fotoja e parë.' : `Tani është fotoja ${to + 1}.`;
 });
 
 // ---------- Llogaria ----------
@@ -746,6 +809,7 @@ outSheet.addEventListener('close', () => {
 });
 $('#signout-all-go').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
+  if (isBusy(btn)) return;
   busy(btn, true);
   const { data } = await api('/api/mjeshtri/dil', { all: true });
   busy(btn, false);
@@ -771,11 +835,13 @@ delSheet.addEventListener('close', () => {
 });
 delConfirm.addEventListener('change', () => { delGo.disabled = !delConfirm.checked; });
 delGo.addEventListener('click', async () => {
+  if (isBusy(delGo)) return;
   busy(delGo, true);
   const { data } = await api('/api/mjeshtri/fshi', { confirm: 'FSHIJE' });
   busy(delGo, false);
   if (!data.ok) { delGo.disabled = !delConfirm.checked; setError($('#delete-error'), data.message || GENERIC); return; }
   isOpen = false;
   delSheet.close();
-  window.dispatchEvent(new CustomEvent('rr:left', { detail: { message: 'Llogaria jote u fshi bashkë me profilin dhe fotot.' } }));
+  window.dispatchEvent(new CustomEvent('rr:left', { detail: { message: data.message || 'Llogaria jote u fshi bashkë me profilin dhe fotot.' } }));
+  draft = null;
 });

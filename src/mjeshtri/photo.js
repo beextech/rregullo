@@ -8,7 +8,7 @@ export class PhotoError extends Error {
   constructor(code, message) {
     super(message || code);
     this.name = 'PhotoError';
-    this.code = code;   // 'too_big' | 'unreadable' | 'too_small'
+    this.code = code;   // 'too_big' | 'unreadable' | 'too_small' | 'too_wide'
   }
 }
 
@@ -17,7 +17,9 @@ const MAX_SOURCE_PIXELS = 120_000_000;   // 108 MP phone photos (12000x9000) pas
 const MAX_CANVAS_PIXELS = 16_000_000;    // iOS Safari will not draw a canvas above 16,777,216 pixels
 const MAX_CANVAS_EDGE = 16_384;
 
-export async function shrinkPhoto(file, { maxEdge = 1600, square = false, squareSize = 800, quality = 0.82, minEdge = 300 } = {}) {
+// minOutEdge / maxOutEdge: what the server accepts for the shorter / longer side of the result. A panorama scaled to
+// maxEdge would come out too thin, so its shorter side is kept at minOutEdge; past maxOutEdge it is refused ('too_wide').
+export async function shrinkPhoto(file, { maxEdge = 1600, square = false, squareSize = 800, quality = 0.82, minEdge = 300, minOutEdge = 0, maxOutEdge = Infinity } = {}) {
   if (!(maxEdge >= 1 && squareSize >= 1 && minEdge >= 0)) throw new TypeError('shrinkPhoto: bad options');
   if (!(file instanceof Blob)) throw new PhotoError('unreadable', 'Not a file.');
   if (file.size > MAX_INPUT_BYTES) throw new PhotoError('too_big', 'The file is larger than 30 MB.');
@@ -43,6 +45,8 @@ export async function shrinkPhoto(file, { maxEdge = 1600, square = false, square
       scale = outW / side;
     } else {
       scale = Math.min(1, maxEdge / Math.max(W, H));
+      if (Math.min(W, H) * scale < minOutEdge) scale = Math.min(1, minOutEdge / Math.min(W, H));
+      if (Math.round(Math.max(W, H) * scale) > maxOutEdge) throw new PhotoError('too_wide', 'The photo is too long and narrow.');
       outW = Math.max(1, Math.round(W * scale));
       outH = Math.max(1, Math.round(H * scale));
     }

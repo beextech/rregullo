@@ -31,12 +31,14 @@ export const PHOTO_MESSAGES = {
 const keyOf = (id) => `foto/${id}.jpg`;
 export const PHOTO_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+// Counts this upload and says whether the day's cap was already reached, in one statement so parallel uploads can't pass it.
 async function uploadedTooMuch(cfg, proId, now) {
   const bucket = await hmac(cfg.appSecret, 'photo-upload', proId);
-  const row = await cfg.db.prepare('SELECT COUNT(*) AS n FROM rate_events WHERE bucket = ?1 AND at > ?2').bind(bucket, now - DAY).first();
-  if ((row?.n || 0) >= PHOTO.uploadsPerDay) return true;
-  await cfg.db.prepare('INSERT INTO rate_events (bucket, at) VALUES (?1, ?2)').bind(bucket, now).run();
-  return false;
+  const res = await cfg.db.prepare(
+    `INSERT INTO rate_events (bucket, at) SELECT ?1, ?2
+     WHERE (SELECT COUNT(*) FROM rate_events WHERE bucket = ?1 AND at > ?3) < ?4`,
+  ).bind(bucket, now, now - DAY, PHOTO.uploadsPerDay).run();
+  return !res.meta || res.meta.changes !== 1;
 }
 
 /**

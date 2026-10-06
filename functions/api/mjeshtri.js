@@ -36,14 +36,17 @@ function json(status, data, headers = {}) {
 
 const fail = (status, message, extra = {}) => json(status, { ok: false, message, ...extra });
 
-function originHost(origin) {
-  try { return new URL(origin).host; } catch { return null; }
+function originOf(url) {
+  try { return new URL(url).origin; } catch { return null; }
 }
 
+// The whole origin, scheme included: a page on http://rregullo.net (say, on hostile Wi-Fi) is not this site.
 function crossSite(request) {
   const origin = request.headers.get('Origin');
-  return Boolean(origin) && originHost(origin) !== new URL(request.url).host;
+  return Boolean(origin) && originOf(origin) !== new URL(request.url).origin;
 }
+
+const mediaType = (request) => (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
 
 /**
  * Reads the body, but never more than max bytes: null when it is longer. A Content-Length over the cap is refused
@@ -75,7 +78,7 @@ async function readCapped(request, max) {
  */
 async function readJson(request) {
   if (crossSite(request)) return { error: fail(403, MESSAGES.generic) };
-  if (!(request.headers.get('Content-Type') || '').includes('application/json')) return { error: fail(415, MESSAGES.generic) };
+  if (mediaType(request) !== 'application/json') return { error: fail(415, MESSAGES.generic) };
   const bytes = await readCapped(request, MAX_BODY);
   if (!bytes) return { error: fail(413, MESSAGES.generic) };
   try {
@@ -90,7 +93,7 @@ async function readJson(request) {
 /** A photo upload: same-site, image/jpeg (which, like JSON, needs a preflight cross-site), at most PHOTO.maxBytes. */
 async function readJpeg(request) {
   if (crossSite(request)) return { error: fail(403, MESSAGES.generic) };
-  if ((request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'image/jpeg') {
+  if (mediaType(request) !== 'image/jpeg') {
     return { error: fail(415, PHOTO_MESSAGES.invalid) };
   }
   const bytes = await readCapped(request, PHOTO.maxBytes);
@@ -288,6 +291,7 @@ export const foto = {
 
 export const fotoFshi = {
   onRequestPost: signedIn(async ({ cfg, pro, now, data }) => {
+    if (suspended(pro)) return fail(403, PROFILE_MESSAGES.suspended);
     const notReady = photosReady(cfg);
     if (notReady) return notReady;
     const out = await deletePhoto(cfg, pro.id, data.id);
@@ -308,10 +312,11 @@ export const fotoRenditja = {
 };
 
 export const fshi = {
-  onRequestPost: signedIn(async ({ cfg, pro, data }) => {
+  onRequestPost: signedIn(async ({ cfg, pro, now, data }) => {
     if (data.confirm !== 'FSHIJE') return fail(400, MESSAGES.generic);
-    await deleteAccount(cfg, pro.id);
-    return json(200, { ok: true }, { 'Set-Cookie': sessionCookie(cfg, '', 0) });
+    const { kept } = await deleteAccount(cfg, pro, now);
+    const message = kept ? PROFILE_MESSAGES.deletedSuspended : PROFILE_MESSAGES.deleted;
+    return json(200, { ok: true, message }, { 'Set-Cookie': sessionCookie(cfg, '', 0) });
   }, { event: 'account_delete_error' }),
   onRequest: notAllowed('POST'),
 };

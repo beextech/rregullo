@@ -27,6 +27,8 @@ export const PROFILE_MESSAGES = {
   submitted: 'Profili u dërgua për shqyrtim. Të njoftojmë kur të aprovohet.',
   alreadyPending: 'Profili yt është duke u shqyrtuar.',
   alreadyApproved: 'Profili yt është aprovuar tashmë.',
+  deleted: 'Llogaria jote u fshi bashkë me profilin dhe fotot.',
+  deletedSuspended: 'Profili dhe fotot u fshinë. Numri yt mbetet i pezulluar.',
 };
 
 // What a profile needs before it can be sent for approval, and what makes it stronger. Shown on the Ballina in this order.
@@ -44,19 +46,22 @@ export const MIN_WORK_PHOTOS = 3;
 
 // ---------- cleaning and validation ----------
 
-// Control characters, format characters (zero-width, bidi overrides, soft hyphen) and line/paragraph separators.
-const INVISIBLE = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+// Control characters and line/paragraph separators become spaces. Format characters (zero-width, bidi overrides,
+// soft hyphen) are removed, except the zero-width joiner that holds emoji like 👨‍🔧 together.
+const BREAKING = /[\p{Cc}\u2028\u2029]/gu;
+const INVISIBLE = /(?!\u200d)\p{Cf}/gu;
+const clean = (line) => line.replace(BREAKING, ' ').replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
 const NAME_CHARS = /^[\p{L}\p{M}\p{N} .'’&-]+$/u;
 
 /** One line of text: NFC, no control or invisible characters, single spaces, trimmed. */
 export function cleanLine(raw) {
-  return String(raw ?? '').normalize('NFC').replace(INVISIBLE, ' ').replace(/\s+/g, ' ').trim();
+  return clean(String(raw ?? '').normalize('NFC'));
 }
 
 /** Free text with paragraphs: like cleanLine per line, at most one empty line between paragraphs. */
 export function cleanText(raw) {
   return String(raw ?? '').normalize('NFC').replace(/\r\n?/g, '\n')
-    .split('\n').map((line) => line.replace(INVISIBLE, ' ').replace(/\s+/g, ' ').trim()).join('\n')
+    .split('\n').map(clean).join('\n')
     .replace(/\n{3,}/g, '\n\n').trim();
 }
 
@@ -237,19 +242,32 @@ export async function endAllSessions(cfg, proId) {
 /**
  * Deletes the account and everything that belongs to it: photos (in R2 first, so none is left behind if that fails),
  * counts, sessions and the profile. The sign-in code record for the number expires on its own within a day.
+ * A suspended account keeps a bare row (number and suspension, nothing else), so deleting it and signing in again
+ * doesn't lift the suspension.
+ * @returns {{ kept: boolean }} kept: the suspended number was kept
  */
-export async function deleteAccount(cfg, proId) {
+export async function deleteAccount(cfg, pro, now) {
   const db = cfg.db;
-  const { results } = await db.prepare('SELECT id FROM pro_photos WHERE pro_id = ?1').bind(proId).all();
+  const keyOf = (id) => `foto/${id}.jpg`;
+  const { results } = await db.prepare('SELECT id FROM pro_photos WHERE pro_id = ?1').bind(pro.id).all();
   if (results.length) {
     if (!cfg.photos) throw new Error('photo storage not configured');
-    await cfg.photos.delete(results.map((r) => `foto/${r.id}.jpg`));
+    await cfg.photos.delete(results.map((r) => keyOf(r.id)));
   }
-  await db.batch([
-    db.prepare('DELETE FROM pro_photos WHERE pro_id = ?1').bind(proId),
-    db.prepare('DELETE FROM pro_stats_daily WHERE pro_id = ?1').bind(proId),
-    db.prepare("DELETE FROM sessions WHERE kind = 'pro' AND subject = ?1").bind(proId),
-    db.prepare('DELETE FROM pros WHERE id = ?1').bind(proId),
+  const kept = pro.status === 'suspended';
+  const [removed] = await db.batch([
+    db.prepare('DELETE FROM pro_photos WHERE pro_id = ?1 RETURNING id').bind(pro.id),
+    db.prepare('DELETE FROM pro_stats_daily WHERE pro_id = ?1').bind(pro.id),
+    db.prepare("DELETE FROM sessions WHERE kind = 'pro' AND subject = ?1").bind(pro.id),
+    kept
+      ? db.prepare(`UPDATE pros SET name = '', about = '', trades = '[]', towns = '[]', years = NULL, price_note = '',
+                      whatsapp = 0, viber = 0, available = 0, verified = 0, updated_at = ?2 WHERE id = ?1`).bind(pro.id, now)
+      : db.prepare('DELETE FROM pros WHERE id = ?1').bind(pro.id),
   ]);
-  log('account_deleted');
+  // A photo whose upload finished between the first look and the batch: its row is gone now, so remove its file too.
+  const known = new Set(results.map((r) => r.id));
+  const late = (removed.results || []).filter((r) => !known.has(r.id)).map((r) => keyOf(r.id));
+  if (late.length) await cfg.photos.delete(late).catch((e) => log('photo_cleanup_failed', { reason: e.message }));
+  log('account_deleted', { kept });
+  return { kept };
 }

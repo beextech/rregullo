@@ -292,8 +292,18 @@ async function main() {
         assert(r.status === 401 && r.data.signedOut, `${path} without a session → ${r.status}`);
         assert((await api(path, body, { cookie: pro, origin: 'https://evil.example' })).status === 403, `${path} cross-site`);
         assert((await api(path, JSON.stringify(body), { cookie: pro, type: 'text/plain' })).status === 415, `${path} as text/plain`);
+        // A type that only mentions JSON isn't JSON (text/plain needs no preflight, so any site could send it).
+        assert((await api(path, JSON.stringify(body), { cookie: pro, type: 'text/plain; application/json' })).status === 415, `${path} as text/plain; application/json`);
         assert((await request(`${BASE}${path}`, { headers: { Cookie: pro } })).status === 405, `${path} GET`);
       }
+      // A page on http://<this host> is another origin. wrangler dev rewrites Origin to its own address, so this is
+      // checked by calling the handler directly, as the live Worker would see it.
+      const { profili } = await import('../functions/api/mjeshtri.js');
+      const viaHttp = await profili.onRequestPost({
+        request: new Request('https://rregullo.net/api/mjeshtri/profili', { method: 'POST', headers: { Origin: 'http://rregullo.net', 'Content-Type': 'application/json' }, body: '{}' }),
+        env: {}, waitUntil() {},
+      });
+      assert(viaHttp.status === 403, `http origin → ${viaHttp.status}`);
       assert((await upload('pune', JPEG)).status === 401, 'upload without a session');
       assert((await upload('pune', JPEG, { cookie: pro, origin: 'https://evil.example' })).status === 403, 'upload cross-site');
       assert((await upload('pune', JPEG, { cookie: pro, type: 'multipart/form-data; boundary=x' })).status === 415, 'upload as a form');
@@ -309,6 +319,10 @@ async function main() {
       assert(p.about.endsWith('rrethinë. Riparime dhe instalime.\n\nThirrni çdo ditë.'), JSON.stringify(p.about));
       const [row] = sql("SELECT name, trades, towns, years, price_note FROM pros WHERE phone = '+38344200300'");
       assert(row.trades === '["hidraulik","ngrohje-klime"]' && row.towns === '["prishtine","fushe-kosove"]' && row.price_note === 'nga 20 € / orë', JSON.stringify(row));
+      // Emoji held together by a zero-width joiner survive; a soft hyphen is removed without splitting the word.
+      const emoji = await api('/api/mjeshtri/profili', { ...FULL, priceNote: 'Hidraulik 👨‍🔧', about: `${FULL.about} Insta\u00adlime.` }, { cookie: pro });
+      const e = emoji.data.dashboard.profile;
+      assert(e.priceNote === 'Hidraulik 👨‍🔧' && e.about.endsWith(' Instalime.'), JSON.stringify([e.priceNote, e.about]));
     });
     await check('24. invalid fields: each one named, nothing saved', async () => {
       const bad = { name: 'Arben <script>', about: 'x'.repeat(601), trades: ['hidraulik', 'elektricist', 'bojaxhi', 'pllakaxhi', 'murator', 'kulmi'], towns: ['prishtine', 'atlantis'], years: 61, priceNote: 'x'.repeat(61) };
@@ -480,6 +494,7 @@ async function main() {
       assert((await api('/api/mjeshtri/disponueshem', { available: true }, { cookie: other })).status === 403, 'switch');
       sql(`DELETE FROM rate_events WHERE bucket = '${await hmac(SECRET, 'photo-upload', proId('+38344200301'))}'`);
       assert((await upload('pune', JPEG, { cookie: other })).status === 403, 'upload');
+      assert((await api('/api/mjeshtri/foto/fshi', { id: '00000000-0000-4000-8000-000000000000' }, { cookie: other })).status === 403, 'delete a photo');
     });
     await check('38. sign out everywhere: every session of this mjeshtër ends, nobody else\'s', async () => {
       const second = await newPro('044 200 300');
@@ -506,6 +521,18 @@ async function main() {
       assert((await me(other)).status === 200, "someone else's account is affected");
       const again = await newPro('044 200 300');
       assert((await me(again)).data.dashboard.profile.name === '', 'signing in again starts a fresh, empty account');
+    });
+    await check('39a. a suspended account deleted: profile and photos gone, but the number stays suspended', async () => {
+      const id = proId('+38344200301');
+      const r = await api('/api/mjeshtri/fshi', { confirm: 'FSHIJE' }, { cookie: other });
+      assert(r.status === 200 && r.data.message.includes('pezulluar'), JSON.stringify(r.data));
+      const [row] = sql(`SELECT name, trades, status, status_note FROM pros WHERE id = '${id}'`);
+      assert(row && row.name === '' && row.trades === '[]' && row.status === 'suspended' && row.status_note === 'Ankesa nga klientët.', JSON.stringify(row));
+      assert(sql(`SELECT COUNT(*) AS n FROM pro_photos WHERE pro_id = '${id}'`)[0].n === 0, 'photos left');
+      const back = await newPro('044 200 301');
+      const d = (await me(back)).data.dashboard;
+      assert(d.status === 'suspended' && d.statusNote === 'Ankesa nga klientët.', JSON.stringify(d));
+      assert((await api('/api/mjeshtri/profili', FULL, { cookie: back })).status === 403, 'can edit again');
     });
 
     console.log('Production settings');

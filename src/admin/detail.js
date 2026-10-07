@@ -122,6 +122,7 @@ function apply(state, { refill = false } = {}) {
   $('#d-percent').textContent = String(state.checklist.percent);
   renderStatus();
   renderPhotos();
+  renderReviews();
   renderHistory();
   updateLimits();
   renderSaveState();
@@ -877,6 +878,72 @@ sheet.addEventListener('click', async (e) => {
   toast('Fotoja u fshi.');
 });
 
+// ---------- reviews ----------
+
+const starText = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+
+function reviewButton(label, action, reviewId, ghost) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = ghost ? 'btn btn-ghost' : 'btn';
+  b.textContent = label;
+  b.dataset.reviewAction = action;
+  b.dataset.reviewId = reviewId;
+  return b;
+}
+
+function renderReviews() {
+  const list = Array.isArray(pro.reviews) ? pro.reviews : [];
+  const shown = list.filter((r) => !r.hidden);
+  const reported = list.filter((r) => r.reported && !r.hidden).length;
+  const avg = shown.length ? shown.reduce((t, r) => t + r.stars, 0) / shown.length : 0;
+  $('#d-reviews-meta').textContent = shown.length
+    ? `${avg.toFixed(1).replace('.', ',')} ★ · ${shown.length}${reported ? ` · ${reported} të raportuara` : ''}`
+    : '';
+  setError($('#d-reviews-error'), '');
+  // Reported ones first, so they are not missed.
+  const ordered = list.slice().sort((a, b) => (Number(b.reported && !b.hidden) - Number(a.reported && !a.hidden)) || b.at - a.at);
+  $('#d-reviews').replaceChildren(...ordered.map((r) => {
+    const li = document.createElement('li');
+    li.className = r.hidden ? 'review-admin-item is-hidden' : 'review-admin-item';
+    const stars = document.createElement('p');
+    stars.className = 'review-admin-stars';
+    stars.textContent = starText(r.stars);
+    stars.setAttribute('aria-label', `${r.stars} nga 5 yje`);
+    li.append(stars, line('review-admin-who', '', `${r.author || 'Klient'} · ${dateTime(r.at)}${r.hidden ? ' · I fshehur' : ''}`));
+    if (r.comment) li.append(line('review-admin-text', '', r.comment));
+    if (r.reply) li.append(line('review-admin-reply', 'Përgjigja e mjeshtrit:', r.reply));
+    const actions = document.createElement('div');
+    actions.className = 'review-admin-actions';
+    if (r.hidden) {
+      actions.append(reviewButton('Shfaqe sërish', 'show', r.id, true));
+    } else if (r.reported) {
+      li.append(line('review-admin-flag', 'Mjeshtri e raportoi:', r.reportReason || 'Pa arsye.'));
+      actions.append(reviewButton('Mbaje', 'keep', r.id, true), reviewButton('Fshihe', 'hide', r.id, false));
+    } else {
+      actions.append(reviewButton('Fshihe', 'hide', r.id, true));
+    }
+    li.append(actions);
+    return li;
+  }));
+  $('#d-reviews').hidden = list.length === 0;
+  $('#d-reviews-empty').hidden = list.length > 0;
+}
+
+$('#d-reviews').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-review-action]');
+  if (!btn || isBusy(btn) || !pro) return;
+  const id = pro.id;
+  setError($('#d-reviews-error'), '');
+  busy(btn, true);
+  const { data } = await api('/api/admin/vleresim', { id, reviewId: btn.dataset.reviewId, action: btn.dataset.reviewAction });
+  busy(btn, false);
+  if (!isOpen || openId !== id) return;
+  if (data.pro) apply(data.pro);
+  if (!data.ok) { setError($('#d-reviews-error'), data.message || GENERIC); return; }
+  toast(data.message || 'U ruajt.');
+});
+
 // ---------- history ----------
 
 const ACTIONS = {
@@ -891,6 +958,9 @@ const ACTIONS = {
   unverify: 'Hoqi «Verifikuar»',
   seen: 'I shënoi ndryshimet si të kontrolluara',
   deleted: 'Fshiu profilin dhe fotot',
+  review_keep: 'E la të dukshëm një vlerësim të raportuar',
+  review_hide: 'Fshehu një vlerësim',
+  review_show: 'E shfaqi sërish një vlerësim',
 };
 
 const DECISIONS = new Set(['approve', 'reject', 'suspend', 'unsuspend', 'verify', 'unverify', 'seen']);

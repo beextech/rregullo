@@ -426,7 +426,7 @@ Step 4 of the app. Clients pick a trade and a municipality, see the approved mje
 |---|---|
 | `GET /kerko?zanati=&komuna=&faqja=` | Search results, 20 per page. Either filter may be empty (all trades, all of Kosovo); unknown values are ignored. |
 | `GET /m/<name>-<handle>` | One mjeshtër: photo, name, Verifikuar, trades, municipalities, years, price note, about, work photos, Thirre / WhatsApp / Viber, the number. A stale or differently written name part redirects (301) to the current address. |
-| `POST /api/numero` | `{ m: handle, lloji: 'shikim' \| 'thirrje' \| 'whatsapp' \| 'viber' }`: counts a view or a tap. Always 204. |
+| `POST /api/numero` | `{ m: handle, lloji: 'shikim' \| 'thirrje' \| 'whatsapp' \| 'viber' }`: counts a view or a tap. 204, except a tap on an approved profile, which answers 200 with `{ receipt }` for reviews (step 5). |
 | `GET /thirrjet` | "Thirrjet e mia": the mjeshtër this browser called or messaged, from `localStorage` only. |
 | `GET /sitemap.xml` | The static sitemap, plus `/kerko` and every approved profile once the directory is open. |
 
@@ -434,11 +434,11 @@ Step 4 of the app. Clients pick a trade and a municipality, see the approved mje
 
 **Who is listed.** Only `approved` profiles. A rejected, suspended or deleted one disappears at once (404). The address `/m/<name>-<handle>` uses `pros.handle` (`migrations/0005_drejtoria.sql`), a random id given at the first approval that never changes, so shared links survive a change of name.
 
-**Ranking.** Available now ("Marr punë tani") first, then the more complete profile (the dashboard's checklist), then Verifikuar, then a rotation that changes daily so that equals take turns at the top. Stars and the number of reviews join with step 5.
+**Ranking.** Available now ("Marr punë tani") first, then the rating (the average of visible reviews, pulled toward 4 stars until a mjeshtër has a few, so one 5-star review doesn't beat twenty 4.8s), then the number of reviews, then the more complete profile (the dashboard's checklist), then Verifikuar, then a rotation that changes daily so that equals take turns at the top.
 
 **Counting.** A profile view and each tap on Thirre, WhatsApp or Viber add to `pro_stats_daily`, which the mjeshtër sees on Ballina. Each is counted at most once per profile, kind and network address per day, and at most 300 counts per address per day, through keyed hashes in `rate_events` that are deleted after a day. The team and the mjeshtër looking at their own profile aren't counted. No cookie is set and nothing about the client is stored.
 
-**Thirrjet e mia.** Each tap also saves the mjeshtër (name, trades, number, profile address, when, which button) in the browser's `localStorage` under `rr_thirrjet`, at most 30, newest first; the homepage remembers the last municipality searched (`rr_komuna`). Step 5 will add "Si shkoi?" there.
+**Thirrjet e mia.** Each tap also saves the mjeshtër (name, trades, number, profile address, when, which button) in the browser's `localStorage` under `rr_thirrjet`, at most 30, newest first; the homepage remembers the last municipality searched (`rr_komuna`). Step 5 adds the tap's receipt and "Si shkoi?" there (see Reviews).
 
 **Privacy.** The "Kërkimi i mjeshtrave" part of the privacy notice (`/privatesia#klientet`) describes the counting and Thirrjet e mia, and "Paneli i mjeshtrit" says the profile page is public and indexable.
 
@@ -447,6 +447,21 @@ Step 4 of the app. Clients pick a trade and a municipality, see the approved mje
 2. Approve a few mjeshtër, check their pages from `/admin` (the "Shiko profilin publik" link), then set `DIRECTORY_OPEN = "1"` and deploy.
 
 **Locally,** add `--var DIRECTORY_OPEN:1` to `wrangler dev`, or build with `DIRECTORY_OPEN=1 npm run build` to see the homepage search box. `npm run test:app` covers the directory: the closed and preview states, search filters, ranking and paging, profile pages and redirects, escaping, counting and its limits, the sitemap and the homepage switch.
+
+## Reviews (step 5)
+
+Only a client who tapped Thirre, WhatsApp or Viber can review, and every review is confirmed by email.
+
+1. **The receipt.** A tap on an approved profile answers with a signed receipt, `handle.time.random.signature` (HMAC with `APP_SECRET`). The browser keeps it in its Thirrjet e mia entry. Nothing about the client is in it.
+2. **"Si shkoi?"** From 12 hours to 60 days after the tap, `/thirrjet` shows a form: 1–5 stars, an optional comment (600) and display name (40), and an email. `POST /api/vleresim` checks the receipt and the limits (5 an hour and 20 a day per network address, 5 a day per email), stores the review as `unconfirmed` and emails a link.
+3. **The link,** `/vleresimi?t=…`, opens a page that publishes the review with one tap (link scanners only GET, so they publish nothing). The same link later deletes it. Confirming clears the stored email, keeps only `hmac('review-email', address)`, and replaces any earlier review from that address for that mjeshtër. One receipt gives one review. Unconfirmed reviews are deleted after 48 hours.
+4. **Shown** on the profile (stars, comment, name or "Klient", month and year, the mjeshtër's reply), as stars and a count on search cards, in the ranking, and as `aggregateRating` in the profile's JSON-LD. The mjeshtër's Ballina shows the average, the new reviews of the last 30 days and the list.
+5. **The mjeshtër** can reply once, publicly (`POST /api/mjeshtri/pergjigju`), or report a review with a reason (`POST /api/mjeshtri/raporto`). A report puts it in the team's "Vlerësime të raportuara" list and in the hourly queue email.
+6. **The team** keeps or hides a reported review, and can hide or show any review, from the mjeshtër's page in `/admin` (`POST /api/admin/vleresim`). Each decision goes into the history.
+
+Table: `reviews` (`migrations/0006_vleresimet.sql`), deleted with the mjeshtër. The migration also rebuilds `admin_log` to allow the three review actions; its rows are copied over unchanged.
+
+**Setup:** `npm run db:migrate` applies `0006`. Reviews need the directory open and Resend working: until `rregullo.net` is verified in Resend, only the Resend account's own address receives the links.
 
 ## Before launch, please also
 
@@ -460,5 +475,6 @@ Step 4 of the app. Clients pick a trade and a municipality, see the approved mje
 - **Native speaker check for `/mjeshtri`:** the sign-in page, the four dashboard tabs, their error messages, the SMS text and the new "Paneli i mjeshtrit" part of the privacy notice.
 - **Native speaker check for `/admin`:** the team screens, the sign-in email, the "new profile" email, the approve and reject SMS texts, and the privacy notice's new and changed parts ("Paneli i mjeshtrit", "Ekipi i Rregullo", cookies).
 - **Native speaker check for the directory:** `/kerko`, the profile pages, `/thirrjet`, the homepage search box and the privacy notice's "Kërkimi i mjeshtrave" part.
+- **Native speaker check for reviews:** "Si shkoi?" on `/thirrjet`, the confirmation email and pages, the reviews on profiles, Ballina and `/admin`, and the privacy notice's "Vlerësimet" part.
 - **Open the directory** (`DIRECTORY_OPEN = "1"`) before sending the launch email, which says Rregullo is available.
 - **Team access:** set `ADMIN_EMAILS`, verify `rregullo.net` in Resend and move `EMAIL_FROM` off the test sender, otherwise only the Resend account's own address gets sign-in links.

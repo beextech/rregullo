@@ -68,6 +68,11 @@ export const ADMIN_MESSAGES = {
   addsTooMany: 'Ke shtuar shumë mjeshtër sot. Provo prapë nesër.',
   deleted: 'Llogaria e mjeshtrit u fshi bashkë me profilin dhe fotot.',
   deletedSuspended: 'Profili dhe fotot u fshinë. Numri mbetet i pezulluar.',
+  reviewNotFound: 'Ky vlerësim nuk u gjet. Mund të jetë fshirë.',
+  reviewState: 'Ky veprim nuk vlen më për këtë vlerësim. Shikoje prapë.',
+  reviewKept: 'Vlerësimi mbetet i dukshëm. Raportimi u mbyll.',
+  reviewHidden: 'Vlerësimi u fsheh nga profili publik.',
+  reviewShown: 'Vlerësimi shfaqet sërish në profilin publik.',
 };
 
 // ---------- settings ----------
@@ -229,7 +234,7 @@ export async function adminMaintenance(cfg, now) {
 
 // ---------- the list ----------
 
-export const LIST_FILTERS = ['pending', 'approved', 'rejected', 'suspended', 'draft', 'changed', 'all'];
+export const LIST_FILTERS = ['pending', 'approved', 'rejected', 'suspended', 'draft', 'changed', 'reported', 'all'];
 const STATUSES = ['draft', 'pending', 'approved', 'rejected', 'suspended'];
 
 const parseList = (json) => { try { const v = JSON.parse(json); return Array.isArray(v) ? v : []; } catch { return []; } };
@@ -257,20 +262,24 @@ export async function listPros(cfg, filter, rawQ) {
        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
        SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) AS suspended,
        SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft,
-       SUM(CASE WHEN status = 'approved' AND edited_at > approved_at THEN 1 ELSE 0 END) AS changed
+       SUM(CASE WHEN status = 'approved' AND edited_at > approved_at THEN 1 ELSE 0 END) AS changed,
+       (SELECT COUNT(DISTINCT pro_id) FROM reviews WHERE reported_at IS NOT NULL AND status = 'visible') AS reported
      FROM pros`,
   ).first();
   const counts = {
     pending: c.pending || 0, approved: c.approved || 0, rejected: c.rejected || 0, suspended: c.suspended || 0,
-    draft: c.draft || 0, changed: c.changed || 0, all: c.total || 0,
+    draft: c.draft || 0, changed: c.changed || 0, reported: c.reported || 0, all: c.total || 0,
   };
 
   const q = String(rawQ || '').slice(0, ADMIN.searchMax);
   const name = fold(q);
   const digits = phoneDigits(q);
-  const where = filter === 'all' ? '' : filter === 'changed'
-    ? "WHERE p.status = 'approved' AND p.edited_at > p.approved_at"
-    : 'WHERE p.status = ?2';
+  const where = {
+    all: '',
+    changed: "WHERE p.status = 'approved' AND p.edited_at > p.approved_at",
+    // Reviews the mjeshtër reported, waiting for the team to keep or hide them.
+    reported: "WHERE EXISTS (SELECT 1 FROM reviews r WHERE r.pro_id = p.id AND r.reported_at IS NOT NULL AND r.status = 'visible')",
+  }[filter] ?? 'WHERE p.status = ?2';
   const order = filter === 'pending' ? 'p.submitted_at ASC, p.created_at ASC' : 'p.updated_at DESC, p.created_at DESC';
   // Without a search the database stops at the cap; with one, the whole filter is read and matched here.
   const { results } = await db.prepare(
@@ -331,6 +340,7 @@ export async function loadPro(cfg, id, now) {
     photosEnabled: dash.photosEnabled,
     checklist: dash.checklist,
     stats: dash.stats,
+    reviews: dash.reviews,
     status: dash.status,
     statusNote: dash.statusNote,
     verified: dash.verified,
@@ -522,7 +532,7 @@ export async function createPro(cfg, admin, phone, now) {
 // ---------- telling the team ----------
 
 /**
- * After a mjeshtër sends a profile: emails every team address that the queue has something new, at most once an
+ * After a mjeshtër sends a profile or reports a review: emails every team address that the queue has something new, at most once an
  * hour (the hour's mark is taken in one statement, so two submits at once send one email). Nothing about the
  * mjeshtër is in it. Skipped when no team address or email setting exists.
  */
@@ -534,8 +544,11 @@ export async function notifyQueue(env, now) {
     'INSERT INTO rate_events (bucket, at) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM rate_events WHERE bucket = ?1)',
   ).bind(await hmac(cfg.appSecret, 'admin-queue', String(hour)), now).run();
   if (!res.meta || res.meta.changes !== 1) return;
-  const row = await cfg.db.prepare("SELECT COUNT(*) AS n FROM pros WHERE status = 'pending'").first();
-  const msg = adminQueueEmail({ siteUrl: cfg.siteUrl, pendingCount: row.n });
+  const row = await cfg.db.prepare(
+    `SELECT (SELECT COUNT(*) FROM pros WHERE status = 'pending') AS pending,
+            (SELECT COUNT(*) FROM reviews WHERE reported_at IS NOT NULL AND status = 'visible') AS reported`,
+  ).first();
+  const msg = adminQueueEmail({ siteUrl: cfg.siteUrl, pendingCount: row.pending, reportedCount: row.reported });
   let sent = 0;
   for (const to of cfg.adminEmails) {
     try {

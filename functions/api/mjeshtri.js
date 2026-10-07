@@ -12,11 +12,15 @@
 //   POST /api/mjeshtri/foto/fshi      { id }                deletes a photo
 //   POST /api/mjeshtri/foto/renditja  { ids }               orders the work photos
 //   POST /api/mjeshtri/fshi           { confirm: 'FSHIJE' } deletes the account
+// Reviews (step 5), signed in only:
+//   POST /api/mjeshtri/pergjigju      { id, text }          the one public reply to a review
+//   POST /api/mjeshtri/raporto        { id, reason }        asks the team to look at a review
 
 import { log } from '../../server/subscribers.js';
 import { notifyQueue } from '../../server/admin.js';
 import { crossSite, fail, json, notAllowed, readJpeg, readJson } from '../../server/http.js';
 import { PHOTO_MESSAGES, deletePhoto, orderPhotos, savePhoto } from '../../server/photos.js';
+import { REVIEW_MESSAGES, replyToReview, reportReview } from '../../server/reviews.js';
 import {
   PROFILE_MESSAGES, deleteAccount, endAllSessions, loadDashboard, markEdited, saveProfile, setAvailable, submitProfile,
   validateProfile,
@@ -247,5 +251,33 @@ export const fshi = {
     const message = kept ? PROFILE_MESSAGES.deletedSuspended : PROFILE_MESSAGES.deleted;
     return json(200, { ok: true, message }, { 'Set-Cookie': sessionCookie(cfg, '', 0) });
   }, { event: 'account_delete_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+// What a reply or report answered, as the dashboard's answer.
+async function reviewAnswer(cfg, pro, now, out, okMessage, alreadyMessage) {
+  if (out.result === 'ok') return dashboard(cfg, pro, now, { message: okMessage });
+  if (out.result === 'invalid') return fail(400, out.message, { field: 'text' });
+  if (out.result === 'already') return fail(409, alreadyMessage);
+  return fail(404, REVIEW_MESSAGES.notFound);
+}
+
+export const pergjigju = {
+  onRequestPost: signedIn(async ({ cfg, pro, now, data }) => {
+    if (suspended(pro)) return fail(403, PROFILE_MESSAGES.suspended);
+    const out = await replyToReview(cfg, pro.id, data.id, data.text, now);
+    return reviewAnswer(cfg, pro, now, out, REVIEW_MESSAGES.replied, REVIEW_MESSAGES.alreadyReplied);
+  }, { event: 'review_reply_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const raporto = {
+  onRequestPost: signedIn(async ({ cfg, pro, now, data, env, waitUntil }) => {
+    if (suspended(pro)) return fail(403, PROFILE_MESSAGES.suspended);
+    const out = await reportReview(cfg, pro.id, data.id, data.reason, now);
+    // The team hears about it with the queue email (at most one an hour).
+    if (out.result === 'ok') waitUntil(notifyQueue(env, now).catch((e) => log('admin_queue_email_failed', { reason: e.message })));
+    return reviewAnswer(cfg, pro, now, out, REVIEW_MESSAGES.reported, REVIEW_MESSAGES.alreadyReported);
+  }, { event: 'review_report_error' }),
   onRequest: notAllowed('POST'),
 };

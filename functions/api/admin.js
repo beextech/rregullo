@@ -16,6 +16,7 @@
 //   POST /api/admin/foto/fshi     { id, photoId }         deletes a photo
 //   POST /api/admin/shto          { phone, consent }      adds a mjeshtër (with their OK)
 //   POST /api/admin/fshi          { id, confirm: 'FSHIJE' }  deletes a mjeshtër's account
+//   POST /api/admin/vleresim      { id, reviewId, action: keep | hide | show, note? }  moderates a review
 
 import {
   ADMIN, ADMIN_MESSAGES, LIST_FILTERS, adminCookie, adminMaintenance, createPro, currentAdmin, decide, endAdminSession,
@@ -25,6 +26,7 @@ import {
 import { crossSite, fail, json, notAllowed, readJpeg, readJson } from '../../server/http.js';
 import { PHOTO_MESSAGES, deletePhoto, savePhoto } from '../../server/photos.js';
 import { PROFILE_MESSAGES, deleteAccount, markEdited, saveProfile, validateProfile } from '../../server/profile.js';
+import { REVIEW_ACTIONS, decideReview } from '../../server/reviews.js';
 import { MESSAGES, normalisePhone, signinMaintenance } from '../../server/signin.js';
 import { smsConfigured } from '../../server/sms.js';
 import { log } from '../../server/subscribers.js';
@@ -201,6 +203,26 @@ export const vendim = {
       }
     }
   }, { event: 'admin_decision_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+const REVIEW_DONE = { keep: ADMIN_MESSAGES.reviewKept, hide: ADMIN_MESSAGES.reviewHidden, show: ADMIN_MESSAGES.reviewShown };
+
+export const vleresim = {
+  onRequestPost: team(async ({ cfg, admin, now, data }) => {
+    if (!validId(data.id)) return fail(404, ADMIN_MESSAGES.notFound);
+    if (!REVIEW_ACTIONS.includes(data.action)) return fail(400, ADMIN_MESSAGES.actionInvalid);
+    const note = typeof data.note === 'string' ? data.note.trim() : '';
+    if (note.length > ADMIN.noteMax) return fail(400, ADMIN_MESSAGES.internalNoteTooLong, { field: 'note' });
+    const out = await decideReview(cfg, data.id, data.reviewId, data.action, now);
+    if (out.result === 'not_found') return fail(404, ADMIN_MESSAGES.reviewNotFound);
+    if (out.result !== 'ok') {
+      const fresh = await loadPro(cfg, data.id, now);
+      return fresh ? fail(409, ADMIN_MESSAGES.reviewState, { pro: fresh }) : fail(404, ADMIN_MESSAGES.notFound);
+    }
+    await logAction(cfg, { proId: data.id, admin, action: `review_${data.action}`, note }, now);
+    return withPro(cfg, data.id, now, { message: REVIEW_DONE[data.action] });
+  }, { event: 'admin_review_error' }),
   onRequest: notAllowed('POST'),
 };
 

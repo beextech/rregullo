@@ -7,6 +7,7 @@ import { TOWNS, TRADES, TOWN_SLUGS, TRADE_SLUGS, labelOf } from '../src/mjeshtri
 import { hmac } from './crypto.js';
 import { HANDLE, profilePath } from './handle.js';
 import { MIN_ABOUT, MIN_WORK_PHOTOS, photoUrl, utcDay } from './profile.js';
+import { makeReceipt, publicReviews, rankRating } from './reviews.js';
 import { log } from './subscribers.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -29,7 +30,9 @@ const parseList = (json) => { try { const v = JSON.parse(json); return Array.isA
 const COLUMNS = `p.id, p.handle, p.phone, p.name, p.about, p.trades, p.towns, p.years, p.price_note, p.whatsapp, p.viber,
   p.available, p.verified, p.approved_at,
   (SELECT id FROM pro_photos WHERE pro_id = p.id AND kind = 'profile' ORDER BY created_at DESC LIMIT 1) AS photo_id,
-  (SELECT COUNT(*) FROM pro_photos WHERE pro_id = p.id AND kind = 'work') AS work_count`;
+  (SELECT COUNT(*) FROM pro_photos WHERE pro_id = p.id AND kind = 'work') AS work_count,
+  (SELECT AVG(stars) FROM reviews WHERE pro_id = p.id AND status = 'visible') AS rating,
+  (SELECT COUNT(*) FROM reviews WHERE pro_id = p.id AND status = 'visible') AS review_count`;
 
 // How complete a profile is, 0–7, the same items as the dashboard's checklist.
 function completeness(r, photosOn) {
@@ -54,12 +57,15 @@ function view(r, photosOn) {
     verified: r.verified === 1,
     photoId: r.photo_id,
     workCount: r.work_count,
+    rating: r.review_count ? Math.round(r.rating * 10) / 10 : null,
+    reviews: r.review_count,
   };
   p.photo = photosOn && p.photoId ? photoUrl(p.photoId) : null;
   p.path = profilePath(p.name, p.handle);
   p.tradeLabels = p.trades.map((s) => labelOf(TRADES, s));
   p.townLabels = p.towns.map((s) => labelOf(TOWNS, s));
   p.score = completeness(p, photosOn);
+  p.rank = rankRating(r.rating, r.review_count);
   return p;
 }
 
@@ -83,8 +89,9 @@ export function readSearch(url) {
 }
 
 /**
- * Approved mjeshtër for a trade and a town (either may be empty: all). Ranked by who takes work now, then how
- * complete the profile is, then Verifikuar, then a daily rotation. Stars and reviews join the ranking with step 5.
+ * Approved mjeshtër for a trade and a town (either may be empty: all). Ranked by who takes work now, then stars
+ * (weighted by how many reviews, rankRating), then the number of reviews, then how complete the profile is, then
+ * Verifikuar, then a daily rotation.
  * @returns {Promise<{ total: number, page: number, pages: number, results: object[] }>}
  */
 export async function search(cfg, { trade, town, page }, now) {
@@ -98,7 +105,8 @@ export async function search(cfg, { trade, town, page }, now) {
   const photosOn = Boolean(cfg.photos);
   const day = utcDay(now);
   const all = results.map((r) => view(r, photosOn)).map((p) => ({ p, turn: dailyTurn(p.handle, day) }));
-  all.sort((a, b) => (b.p.available - a.p.available) || (b.p.score - a.p.score) || (b.p.verified - a.p.verified) || (a.turn - b.turn));
+  all.sort((a, b) => (b.p.available - a.p.available) || (b.p.rank - a.p.rank) || (b.p.reviews - a.p.reviews)
+    || (b.p.score - a.p.score) || (b.p.verified - a.p.verified) || (a.turn - b.turn));
   const pages = Math.max(1, Math.ceil(all.length / DIRECTORY.perPage));
   const at = Math.min(page, pages);
   return {
@@ -122,6 +130,7 @@ export async function loadPublicProfile(cfg, handle) {
     ).bind(row.id).all();
     p.work = results.map((w) => ({ url: photoUrl(w.id), width: w.width, height: w.height }));
   }
+  p.reviewList = p.reviews ? await publicReviews(cfg, row.id) : [];
   return p;
 }
 
@@ -137,6 +146,13 @@ export async function sitemapEntries(cfg) {
 
 // The API's names for what was tapped, and the column each one adds to.
 export const TAPS = { shikim: 'views', thirrje: 'calls', whatsapp: 'whatsapp', viber: 'viber' };
+
+/** A tap's receipt for "Si shkoi?", for an approved profile only; null otherwise. */
+export async function receiptFor(cfg, handle, kind, now) {
+  if (!TAPS[kind] || kind === 'shikim' || !HANDLE.test(handle)) return null;
+  const pro = await cfg.db.prepare("SELECT 1 FROM pros WHERE handle = ?1 AND status = 'approved'").bind(handle).first();
+  return pro ? makeReceipt(cfg, handle, now) : null;
+}
 
 /**
  * Counts a profile view or a tap for the mjeshtër with this handle, at most once per kind per day per network

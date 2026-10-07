@@ -110,6 +110,7 @@
           <li><a class="filter" href="#lista/rejected" data-filter="rejected">Kthyer për ndryshime <span class="filter-count" data-count="rejected"></span></a></li>
           <li><a class="filter" href="#lista/suspended" data-filter="suspended">Pezulluar <span class="filter-count" data-count="suspended"></span></a></li>
           <li><a class="filter" href="#lista/draft" data-filter="draft">Pa dërguar <span class="filter-count" data-count="draft"></span></a></li>
+          <li><a class="filter" href="#lista/reported" data-filter="reported">Vlerësime të raportuara <span class="filter-count" data-count="reported"></span></a></li>
           <li><a class="filter" href="#lista/all" data-filter="all">Të gjithë <span class="filter-count" data-count="all"></span></a></li>
         </ul>
       </nav>
@@ -304,6 +305,17 @@
             <p class="photo-status" id="d-work-status" role="status"></p>
           </section>
         </div>
+
+        <section class="panel d-reviews" aria-labelledby="d-reviews-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="d-reviews-title">Vlerësimet</h2>
+            <p class="panel-meta" id="d-reviews-meta"></p>
+          </div>
+          <p class="pro-hint">Klientët i konfirmojnë me email. Kur mjeshtri raporton një vlerësim, vendos nëse mbetet apo fshihet.</p>
+          <ol class="review-admin" id="d-reviews"></ol>
+          <p class="pro-hint" id="d-reviews-empty" hidden>Ende asnjë vlerësim i konfirmuar.</p>
+          <p class="form-error" id="d-reviews-error" role="alert" hidden></p>
+        </section>
 
         <section class="panel d-history" aria-labelledby="d-history-title">
           <h2 class="panel-title" id="d-history-title">Historia</h2>

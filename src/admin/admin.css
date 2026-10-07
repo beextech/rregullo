@@ -94,13 +94,14 @@
 @media (min-width: 1024px) {
   .detail-grid {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-    grid-template-areas: "main status" "main history";
-    grid-template-rows: auto 1fr;
+    grid-template-areas: "main status" "main reviews" "main history";
+    grid-template-rows: auto auto 1fr;
     align-items: start;
   }
   .d-status { grid-area: status; }
   .d-main { grid-area: main; }
   .d-history { grid-area: history; }
+  .d-reviews { grid-area: reviews; }
 }
 
 .d-status .panel-title { outline: none; }
@@ -154,3 +155,16 @@
 .sheet-form .pro-label { margin-left: 4px; }
 .sheet-form .pro-hint { padding-left: 4px; }
 .sheet-form .field-error { padding-left: 4px; }
+
+/* Reviews: the team keeps or hides what a mjeshtër reported. */
+.review-admin { list-style: none; margin: 10px 0 0; padding: 0; }
+.review-admin-item { padding: 12px 0; border-top: 1px solid var(--line); }
+.review-admin-item:first-child { border-top: 0; }
+.review-admin-item.is-hidden { opacity: .72; }
+.review-admin-stars { color: var(--lime); letter-spacing: 1px; }
+.review-admin-who { color: var(--mute); font-size: 13.5px; overflow-wrap: anywhere; }
+.review-admin-text { margin-top: 6px; color: var(--soft); font-size: 14.5px; white-space: pre-line; overflow-wrap: anywhere; }
+.review-admin-reply { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--soft); font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+.review-admin-flag { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 196, 0, .08); font-size: 14px; overflow-wrap: anywhere; }
+.review-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.review-admin-actions .btn { min-height: 40px; padding: 0 14px; font-size: 14px; }

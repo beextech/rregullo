@@ -1,16 +1,18 @@
 // Cloudflare Worker entry. Static files in dist/ are served by Workers static assets (the ASSETS binding);
 // the dynamic routes reuse the handlers in functions/, which keep the Pages Functions signature.
 // Mjeshtër photos (/foto/<id>.jpg) come from R2. The team admin's page (/admin/) is static; its API is /api/admin/*.
-// The public directory (/kerko, /m/<name>-<handle>, /api/numero, /sitemap.xml) is in functions/drejtoria.js.
+// The public directory (/kerko, /m/<name>-<handle>, /api/numero, /sitemap.xml) is in functions/drejtoria.js, and the
+// clients' reviews (/api/vleresim, /vleresimi) in functions/vleresimi.js.
 
 import * as subscribe from '../functions/api/subscribe.js';
 import * as konfirmo from '../functions/konfirmo.js';
 import * as cregjistrohu from '../functions/cregjistrohu.js';
 import {
-  dergo, dil, disponueshem, foto, fotoFshi, fotoRenditja, fshi, hyr, kodi, profili, une,
+  dergo, dil, disponueshem, foto, fotoFshi, fotoRenditja, fshi, hyr, kodi, pergjigju, profili, raporto, une,
 } from '../functions/api/mjeshtri.js';
 import * as admin from '../functions/api/admin.js';
 import * as drejtoria from '../functions/drejtoria.js';
+import * as vleresimi from '../functions/vleresimi.js';
 import { servePhoto } from '../server/photos.js';
 
 const ROUTES = {
@@ -28,6 +30,8 @@ const ROUTES = {
   '/api/mjeshtri/foto/fshi': fotoFshi,
   '/api/mjeshtri/foto/renditja': fotoRenditja,
   '/api/mjeshtri/fshi': fshi,
+  '/api/mjeshtri/pergjigju': pergjigju,
+  '/api/mjeshtri/raporto': raporto,
   '/api/admin/lidhja': admin.lidhja,
   '/api/admin/hyr': admin.hyr,
   '/api/admin/une': admin.une,
@@ -40,9 +44,12 @@ const ROUTES = {
   '/api/admin/foto/fshi': admin.fotoFshi,
   '/api/admin/shto': admin.shto,
   '/api/admin/fshi': admin.fshi,
+  '/api/admin/vleresim': admin.vleresim,
   '/kerko': drejtoria.kerko,
   '/api/numero': drejtoria.numero,
   '/sitemap.xml': drejtoria.sitemap,
+  '/api/vleresim': vleresimi.dergo,
+  '/vleresimi': vleresimi.lidhja,
 };
 
 const PHOTO_PATH = /^\/foto\/([^/]+)\.jpg$/;

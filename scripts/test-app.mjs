@@ -1,4 +1,5 @@
-// End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2), the team admin (step 3) and the public directory (step 4) against the real
+// End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2), the team admin (step 3), the public directory (step 4)
+// and reviews (step 5) against the real
 // Worker, a local D1 database and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS), Resend
 // (email) and Cloudflare Turnstile. Nothing is sent or stored anywhere else.
 //   npm run test:app      (npm test runs it after the signup tests)
@@ -1004,7 +1005,7 @@ async function main() {
       assert(all.status === 200 && all.data.truncated === false, JSON.stringify(all.data).slice(0, 200));
       const by = Object.fromEntries(sql('SELECT status, COUNT(*) AS n FROM pros GROUP BY status').map((r) => [r.status, r.n]));
       const changed = sql("SELECT COUNT(*) AS n FROM pros WHERE status = 'approved' AND edited_at > approved_at")[0].n;
-      const expected = { pending: by.pending || 0, approved: by.approved || 0, rejected: by.rejected || 0, suspended: by.suspended || 0, draft: by.draft || 0, changed, all: Object.values(by).reduce((a, b) => a + b, 0) };
+      const expected = { pending: by.pending || 0, approved: by.approved || 0, rejected: by.rejected || 0, suspended: by.suspended || 0, draft: by.draft || 0, changed, reported: 0, all: Object.values(by).reduce((a, b) => a + b, 0) };
       assert(JSON.stringify(all.data.counts) === JSON.stringify(expected), `${JSON.stringify(all.data.counts)} vs ${JSON.stringify(expected)}`);
       assert(all.data.items.length === expected.all, `${all.data.items.length} rows`);
       assert(JSON.stringify((await list('')).data) === JSON.stringify(all.data), 'no filter is not "all"');
@@ -1546,7 +1547,9 @@ async function main() {
     await check('76. views and taps are counted per kind and day, once per network address; the Ballina shows them', async () => {
       const [ip1, ip2] = [freshIp(), freshIp()];
       for (const [lloji, ip] of [['shikim', ip1], ['shikim', ip1], ['shikim', ip2], ['thirrje', ip1], ['thirrje', ip1], ['whatsapp', ip1], ['viber', ip2], ['viber', ip2]]) {
-        assert(await tap(OPEN, { m: dritaHandle, lloji }, { ip }) === 204, `${lloji} → not 204`);
+        // A view answers 204; a tap on an approved profile answers 200 with the receipt reviews need (step 5).
+        const want = lloji === 'shikim' ? 204 : 200;
+        assert(await tap(OPEN, { m: dritaHandle, lloji }, { ip }) === want, `${lloji} → not ${want}`);
       }
       const [row] = sql(`SELECT views, calls, whatsapp, viber FROM pro_stats_daily WHERE pro_id = '${dritaId}' AND day = '${today()}'`);
       assert(row && row.views === 2 && row.calls === 1 && row.whatsapp === 1 && row.viber === 1, JSON.stringify(row));
@@ -1567,7 +1570,7 @@ async function main() {
       const bucket = await hmac(SECRET, 'tap-ip', `${capped}|${today()}`);
       const now = Date.now();
       sql(`INSERT INTO rate_events (bucket, at) VALUES ${Array.from({ length: 300 }, (_, i) => `('${bucket}', ${now - 1000 - i})`).join(', ')}`);
-      assert(await tap(OPEN, { m: h, lloji: 'whatsapp' }, { ip: capped }) === 204, 'capped');
+      assert(await tap(OPEN, { m: h, lloji: 'whatsapp' }, { ip: capped }) === 200, 'capped: not counted, but the receipt still comes');
       assert((await request(`${OPEN}/api/numero`)).status === 405, 'GET');
       // Another mjeshtër looking is a client like any other.
       assert(await tap(OPEN, { m: h, lloji: 'shikim' }, { cookie: besa }) === 204, 'another mjeshtër');
@@ -1601,7 +1604,8 @@ async function main() {
         assert((await call({ ...live, DIRECTORY_OPEN: '0' }, 'https://rregullo.net')).status === 204, 'closed');
         assert((await call({ ...live, DIRECTORY_OPEN: 'yes' }, 'https://rregullo.net')).status === 204, 'not "1"');
         assert(await calls() === 0, 'counted');
-        assert((await call(live, 'https://rregullo.net')).status === 204 && await calls() === 1, 'this site: not counted');
+        const ok = await call(live, 'https://rregullo.net');
+        assert(ok.status === 200 && /^livehandle\./.test((await ok.json()).receipt) && await calls() === 1, 'this site: not counted, or no receipt');
       } finally {
         await proxy.dispose();
       }
@@ -1630,8 +1634,263 @@ async function main() {
       for (const a of assets) assert((await request(`${BASE}${a}`)).status === 200, `${a} not served`);
       assert((await (await request(`${BASE}/robots.txt`)).text()).includes('Disallow: /thirrjet'), 'robots.txt');
     });
+    // ---------- step 5: reviews ----------
+    const REVIEW_SUBJECT = 'Konfirmo vlerësimin tënd në Rregullo';
+    const HOUR = 3600000;
+    const ago = (h) => Date.now() - h * HOUR;
+    let nonceN = 0;
+    // A receipt as the Worker signs them, for any moment: the tests can't wait 12 hours.
+    const receiptAt = async (handle, at) => {
+      const nonce = `n${String(nonceN++).padStart(15, '0')}`;
+      return `${handle}.${at.toString(36)}.${nonce}.${(await hmac(SECRET, 'receipt', `${handle}.${at}.${nonce}`)).slice(0, 32)}`;
+    };
+    const sendReview = async (body, { ip = freshIp(), base = OPEN } = {}) => {
+      const res = await request(`${base}/api/vleresim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'CF-Connecting-IP': ip }, body: JSON.stringify(body),
+      });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    };
+    const reviewMails = (to) => mock.messages.filter((m) => m.subject === REVIEW_SUBJECT && m.to.includes(to));
+    const reviewToken = (m) => ((m && m.text.match(/\/vleresimi\?t=([A-Za-z0-9_-]{43})/)) || [])[1];
+    const linkPost = async (t, veprimi) => {
+      const res = await request(`${OPEN}/vleresimi`, {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'CF-Connecting-IP': freshIp() }, body: new URLSearchParams({ t, veprimi }).toString(),
+      });
+      return { status: res.status, html: await res.text() };
+    };
+    const reviewsOf = (id) => sql(`SELECT id, stars, comment, author, email, status, reply, reported_at FROM reviews WHERE pro_id = '${id}' ORDER BY created_at`);
+    const visibleOf = (id) => reviewsOf(id).filter((r) => r.status === 'visible');
+    async function eventually(test, what) {
+      for (let i = 0; i < 40; i++) { if (test()) return; await new Promise((r) => setTimeout(r, 100)); }
+      throw new Error(what);
+    }
+    // Writes and confirms one review; returns its link token.
+    async function reviewed(handle, email, stars, extra = {}) {
+      const r = await sendReview({ receipt: await receiptAt(handle, ago(13)), stars, email, ...extra });
+      assert(r.status === 200, `send → ${r.status} ${JSON.stringify(r.data)}`);
+      const t = reviewToken(reviewMails(email).at(-1));
+      const c = await linkPost(t, 'konfirmo');
+      assert(c.status === 200, `confirm → ${c.status}`);
+      return t;
+    }
+
+    console.log('Reviews: the receipt and the form');
+    await check('81. a tap on an approved profile gives a signed receipt; a review with it is refused before 12 hours', async () => {
+      const res = await request(`${OPEN}/api/numero`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: OPEN, 'CF-Connecting-IP': freshIp() }, body: JSON.stringify({ m: dritaHandle, lloji: 'viber' }),
+      });
+      const { receipt } = await res.json();
+      const m = /^([a-z0-9]+)\.([0-9a-z]+)\.([A-Za-z0-9_-]{16})\.([0-9a-f]{32})$/.exec(receipt || '');
+      assert(res.status === 200 && m && m[1] === dritaHandle && Math.abs(parseInt(m[2], 36) - Date.now()) < 60000, `${res.status} ${receipt}`);
+      assert(m[4] === (await hmac(SECRET, 'receipt', `${m[1]}.${parseInt(m[2], 36)}.${m[3]}`)).slice(0, 32), 'signature');
+      const early = await sendReview({ receipt, stars: 5, email: 'klienti1@rregullo.test' });
+      assert(early.status === 400 && early.data.reason === 'early' && early.data.message.includes('12 orë'), `${early.status} ${JSON.stringify(early.data)}`);
+      assert(reviewsOf(dritaId).length === 0 && reviewMails('klienti1@rregullo.test').length === 0, 'stored or emailed');
+    });
+    await check('82. forged, altered, too old or future receipts, unlisted profiles and a closed directory: refused, nothing stored or sent', async () => {
+      const good = await receiptAt(dritaHandle, ago(13));
+      const [h, at, n, sig] = good.split('.');
+      const flip = sig.slice(0, -1) + (sig.at(-1) === '0' ? '1' : '0');
+      const before = mock.messages.length;
+      for (const [receipt, reason] of [
+        [`${h}.${at}.${n}.${flip}`, 'invalid'],
+        [`${H('k')}.${at}.${n}.${sig}`, 'invalid'],
+        [`${h}.${(Date.now() - 14 * HOUR).toString(36)}.${n}.${sig}`, 'invalid'],
+        ['', 'invalid'], [42, 'invalid'], ['a.b.c.d', 'invalid'],
+        [await receiptAt(dritaHandle, ago(61 * 24)), 'late'],
+        [await receiptAt(dritaHandle, Date.now() + HOUR), 'invalid'],
+        [await receiptAt(dritaHandle, ago(11.9)), 'early'],
+      ]) {
+        const r = await sendReview({ receipt, stars: 4, email: 'klienti2@rregullo.test' });
+        assert(r.status === 400 && r.data.reason === reason, `${String(receipt).slice(0, 30)} → ${r.status} ${r.data.reason}`);
+      }
+      for (const k of ['f', 'c']) {   // pending, suspended
+        const r = await sendReview({ receipt: await receiptAt(H(k), ago(13)), stars: 4, email: 'klienti2@rregullo.test' });
+        assert(r.status === 404 && r.data.reason === 'gone', `${k} → ${r.status}`);
+      }
+      const closed = await sendReview({ receipt: good, stars: 4, email: 'klienti2@rregullo.test' }, { base: BASE });
+      assert(closed.status === 404, `closed → ${closed.status}`);
+      assert(sql('SELECT COUNT(*) AS n FROM reviews')[0].n === 0 && mock.messages.length === before, 'stored or emailed');
+    });
+    await check('83. the form is checked: stars, email, comment and name lengths; a filled honeypot is quietly dropped', async () => {
+      const receipt = await receiptAt(dritaHandle, ago(13));
+      for (const [body, field] of [
+        [{ stars: 0 }, 'stars'], [{ stars: 6 }, 'stars'], [{ stars: 2.5 }, 'stars'], [{ stars: 'pesë' }, 'stars'],
+        [{ email: '' }, 'email'], [{ email: 'jo-email' }, 'email'],
+        [{ comment: 'x'.repeat(601) }, 'comment'], [{ author: 'x'.repeat(41) }, 'author'],
+      ]) {
+        const r = await sendReview({ receipt, stars: 5, email: 'klienti3@rregullo.test', ...body });
+        assert(r.status === 400 && r.data.field === field, `${JSON.stringify(body).slice(0, 40)} → ${r.status} ${r.data.field}`);
+      }
+      const before = mock.messages.length;
+      const bot = await sendReview({ receipt, stars: 1, email: 'klienti3@rregullo.test', company_site: 'https://spam.example' });
+      assert(bot.status === 200 && bot.data.ok, `honeypot → ${bot.status}`);
+      assert(sql('SELECT COUNT(*) AS n FROM reviews')[0].n === 0 && mock.messages.length === before, 'the bot review was stored or emailed');
+      const text = await request(`${OPEN}/api/vleresim`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain', Origin: OPEN }, body: JSON.stringify({ receipt, stars: 5, email: 'klienti3@rregullo.test' }),
+      });
+      assert(text.status >= 400 && text.status < 500, `text/plain → ${text.status}`);
+      assert((await request(`${OPEN}/api/vleresim`)).status === 405, 'GET');
+    });
+
+    console.log('Reviews: the emailed link');
+    let firstToken = '';
+    await check('84. a review is stored unconfirmed and emailed; the link page publishes it only on the button, then keeps no email', async () => {
+      const email = 'klienti4@rregullo.test';
+      const r = await sendReview({ receipt: await receiptAt(dritaHandle, ago(13)), stars: 4, email, comment: 'Erdhi në kohë.\n<b>Punë e mirë</b>', author: 'Arta' });
+      assert(r.status === 200 && r.data.ok, `${r.status} ${JSON.stringify(r.data)}`);
+      const mails = reviewMails(email);
+      assert(mails.length === 1 && mails[0].html.includes('Publiko vlerësimin'), `${mails.length} emails`);
+      firstToken = reviewToken(mails[0]);
+      assert(firstToken, 'no link');
+      let [row] = reviewsOf(dritaId);
+      assert(row && row.status === 'unconfirmed' && row.email === email && row.stars === 4 && row.author === 'Arta', JSON.stringify(row));
+      assert(!JSON.stringify(sql('SELECT * FROM reviews')).includes(firstToken), 'the raw token is stored');
+      assert(!(await get(`${OPEN}${dritaPath}`)).html.includes('Erdhi në kohë'), 'shown before confirmation');
+      // Opening the link (or a scanner fetching it) publishes nothing.
+      const page = await get(`${OPEN}/vleresimi?t=${firstToken}`);
+      assert(page.status === 200 && page.html.includes('data-autosubmit') && page.html.includes('name="veprimi" value="konfirmo"'), `GET → ${page.status}`);
+      assert(reviewsOf(dritaId)[0].status === 'unconfirmed', 'published by a GET');
+      const c = await linkPost(firstToken, 'konfirmo');
+      assert(c.status === 200 && c.html.includes('Vlerësimi u publikua.') && c.html.includes(`href="${dritaPath}"`), `confirm → ${c.status}`);
+      [row] = reviewsOf(dritaId);
+      assert(row.status === 'visible' && row.email === null, JSON.stringify(row));
+      const again = await get(`${OPEN}/vleresimi?t=${firstToken}`);
+      assert(again.status === 200 && again.html.includes('Vlerësimi yt është publikuar.') && again.html.includes('value="fshi"') && again.html.includes(`href="${dritaPath}"`), `again → ${again.status}`);
+      assert((await linkPost('x'.repeat(43), 'konfirmo')).status === 400, 'unknown token');
+      assert((await linkPost(firstToken, 'publiko')).status === 400, 'unknown action');
+      assert((await get(`${OPEN}/vleresimi?t=short`)).status === 400, 'short token');
+    });
+    await check('85. a confirmed review shows on the profile, escaped, with the stars in search and in the share data', async () => {
+      const p = await get(`${OPEN}${dritaPath}`);
+      assert(p.html.includes('Erdhi në kohë.') && p.html.includes('&lt;b&gt;Punë e mirë&lt;/b&gt;') && !p.html.includes('<b>Punë'), 'comment');
+      assert(p.html.includes('★★★★☆') && p.html.includes('Arta · ') && p.html.includes('4,0 nga 5 · 1 vlerësim'), 'stars, name or summary');
+      const ld = JSON.parse(p.html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+      assert(ld.aggregateRating && ld.aggregateRating.ratingValue === 4 && ld.aggregateRating.reviewCount === 1, JSON.stringify(ld.aggregateRating));
+      const s = await get(`${OPEN}/kerko?zanati=elektricist&komuna=gjilan`);
+      assert(s.html.includes('4,0') && s.html.includes('1 vlerësim'), 'stars on the card');
+      const none = await get(`${OPEN}/m/rend-bekim-${H('b')}`);
+      assert(none.html.includes('Ende pa vlerësime.') && !none.html.includes('aggregateRating'), 'a profile without reviews');
+    });
+    await check('86. one receipt gives one review; the same email again replaces its review; the link deletes it', async () => {
+      const receipt = await receiptAt(dritaHandle, ago(20));
+      const a = await sendReview({ receipt, stars: 2, email: 'klienti5@rregullo.test' });
+      const b = await sendReview({ receipt, stars: 5, email: 'klienti6@rregullo.test' });
+      assert(a.status === 200 && b.status === 200, `${a.status} ${b.status}`);
+      assert((await linkPost(reviewToken(reviewMails('klienti5@rregullo.test').at(-1)), 'konfirmo')).status === 200, 'confirm the first');
+      const second = await linkPost(reviewToken(reviewMails('klienti6@rregullo.test').at(-1)), 'konfirmo');
+      assert(second.status === 409 && second.html.includes('Për këtë thirrje është dhënë tashmë një vlerësim.'), `the second review of one receipt → ${second.status}`);
+      const used = await sendReview({ receipt, stars: 5, email: 'klienti6@rregullo.test' });
+      assert(used.status === 409 && used.data.reason === 'used', `${used.status} ${used.data.reason}`);
+      assert(visibleOf(dritaId).length === 2, JSON.stringify(visibleOf(dritaId)));
+      // Arta reviews again after another call: it replaces her 4 stars.
+      const t = await reviewed(dritaHandle, 'klienti4@rregullo.test', 5, { comment: 'Sërish shumë mirë.' });
+      const visible = visibleOf(dritaId);
+      assert(visible.length === 2 && visible.some((r) => r.stars === 5 && r.comment === 'Sërish shumë mirë.') && !visible.some((r) => r.comment.startsWith('Erdhi')), JSON.stringify(visible));
+      assert((await linkPost(firstToken, 'fshi')).status === 400, 'the replaced review\'s link still works');
+      const del = await linkPost(t, 'fshi');
+      assert(del.status === 200 && del.html.includes('Vlerësimi yt u fshi.'), `delete → ${del.status}`);
+      assert(visibleOf(dritaId).map((r) => r.stars).join() === '2', JSON.stringify(visibleOf(dritaId)));
+      assert((await linkPost(t, 'fshi')).status === 400, 'deleted twice');
+    });
+    await check('87. an unconfirmed review expires after 48 hours and is cleared away with its email', async () => {
+      const r = await sendReview({ receipt: await receiptAt(dritaHandle, ago(30)), stars: 3, email: 'klienti8@rregullo.test' });
+      assert(r.status === 200, `send → ${r.status}`);
+      const t = reviewToken(reviewMails('klienti8@rregullo.test').at(-1));
+      sql(`UPDATE reviews SET created_at = created_at - ${49 * HOUR} WHERE email = 'klienti8@rregullo.test'`);
+      const c = await linkPost(t, 'konfirmo');
+      assert(c.status === 410 && c.html.includes('Kjo lidhje ka skaduar.'), `→ ${c.status}`);
+      // Any review sent afterwards clears it.
+      await sendReview({ receipt: await receiptAt(dritaHandle, ago(31)), stars: 3, email: 'klienti9@rregullo.test' });
+      await eventually(() => sql("SELECT COUNT(*) AS n FROM reviews WHERE email = 'klienti8@rregullo.test'")[0].n === 0, 'not cleared');
+    });
+    await check('88. at most 5 reviews an hour from one network address, and 5 links a day to one email', async () => {
+      const ip = freshIp();
+      for (let i = 0; i < 5; i++) {
+        const r = await sendReview({ receipt: await receiptAt(dritaHandle, ago(14)), stars: 3, email: `kufiri${i}@rregullo.test` }, { ip });
+        assert(r.status === 200, `#${i + 1} → ${r.status}`);
+      }
+      const sixth = await sendReview({ receipt: await receiptAt(dritaHandle, ago(14)), stars: 3, email: 'kufiri9@rregullo.test' }, { ip });
+      assert(sixth.status === 429 && sixth.data.reason === 'rate_limited', `${sixth.status} ${sixth.data.reason}`);
+      for (let i = 0; i < 5; i++) assert((await sendReview({ receipt: await receiptAt(dritaHandle, ago(14)), stars: 3, email: 'shume@rregullo.test' })).status === 200, `email #${i + 1}`);
+      const more = await sendReview({ receipt: await receiptAt(dritaHandle, ago(14)), stars: 3, email: 'shume@rregullo.test' });
+      assert(more.status === 429, `email #6 → ${more.status}`);
+      assert(reviewMails('shume@rregullo.test').length === 5 && reviewMails('kufiri9@rregullo.test').length === 0, 'emails');
+      sql("DELETE FROM reviews WHERE status = 'unconfirmed'");
+    });
+
+    console.log('Reviews: the mjeshtër and the team');
+    let reviewId = '';
+    await check('89. the mjeshtër sees the reviews on Ballina, replies once in public, and reports one to the team', async () => {
+      await reviewed(dritaHandle, 'klienti7@rregullo.test', 1, { comment: 'Nuk erdhi fare.', author: 'Besnik' });
+      const d = (await me(drita)).data.dashboard;
+      assert(d.reviews.length === 2 && d.stats.rating === 1.5 && d.stats.reviews === 2 && d.stats.newReviews === 2, JSON.stringify(d.stats));
+      const r = d.reviews.find((x) => x.comment === 'Nuk erdhi fare.');
+      reviewId = r.id;
+      assert(r.author === 'Besnik' && !r.reported && !r.reply && !('email' in r) && !('emailHash' in r), JSON.stringify(r));
+      const other = d.reviews.find((x) => x.id !== reviewId).id;
+      assert((await api('/api/mjeshtri/pergjigju', { id: reviewId, text: '  ' }, { cookie: drita })).status === 400, 'empty reply');
+      assert((await api('/api/mjeshtri/pergjigju', { id: reviewId, text: 'x'.repeat(401) }, { cookie: drita })).status === 400, 'long reply');
+      const rep = await api('/api/mjeshtri/pergjigju', { id: reviewId, text: 'Më vjen keq, pata një urgjencë. <i>Ju thirra</i>.' }, { cookie: drita });
+      assert(rep.status === 200 && rep.data.dashboard.reviews.find((x) => x.id === reviewId).reply.startsWith('Më vjen keq'), `${rep.status} ${JSON.stringify(rep.data).slice(0, 200)}`);
+      assert((await api('/api/mjeshtri/pergjigju', { id: reviewId, text: 'Prapë.' }, { cookie: drita })).status === 409, 'a second reply');
+      // Another mjeshtër can't touch it.
+      for (const [path, body] of [['pergjigju', { id: other, text: 'Hi' }], ['raporto', { id: reviewId, reason: 'Nuk më pëlqen.' }]]) {
+        const x = await api(`/api/mjeshtri/${path}`, body, { cookie: besa });
+        assert(x.status === 404 || x.status === 403, `another mjeshtër: ${path} → ${x.status}`);
+      }
+      assert(!reviewsOf(dritaId).find((x) => x.id === other).reply && !reviewsOf(dritaId).find((x) => x.id === reviewId).reported_at, 'changed by another mjeshtër');
+      const p = await get(`${OPEN}${dritaPath}`);
+      assert(p.html.includes('Përgjigja e Drit') && p.html.includes('&lt;i&gt;Ju thirra&lt;/i&gt;'), 'the reply on the profile');
+      assert((await api('/api/mjeshtri/raporto', { id: reviewId, reason: '' }, { cookie: drita })).status === 400, 'no reason');
+      sql(`DELETE FROM rate_events WHERE bucket = '${await hmac(SECRET, 'admin-queue', String(Math.floor(Date.now() / 3600000)))}'`);
+      const before = mock.messages.length;
+      const rp = await api('/api/mjeshtri/raporto', { id: reviewId, reason: 'Ky klient nuk më ka thirrur kurrë.' }, { cookie: drita });
+      assert(rp.status === 200 && rp.data.dashboard.reviews.find((x) => x.id === reviewId).reported, `${rp.status} ${JSON.stringify(rp.data).slice(0, 200)}`);
+      assert((await api('/api/mjeshtri/raporto', { id: reviewId, reason: 'Prapë.' }, { cookie: drita })).status === 409, 'reported twice');
+      await eventually(() => mock.messages.slice(before).some((m) => m.text.includes('1 vlerësim i raportuar')), 'no queue email for the report');
+      assert((await get(`${OPEN}${dritaPath}`)).html.includes('Nuk erdhi fare.'), 'hidden by the report alone');
+    });
+    await check('90. the team sees reported reviews in their own list, keeps or hides them, and can show one again; each goes into the history', async () => {
+      const list = await team('mjeshtrit', { status: 'reported' }, { cookie: ekipi1 });
+      assert(list.status === 200 && list.data.counts.reported === 1 && list.data.items.map((i) => i.id).join() === dritaId, JSON.stringify(list.data.counts));
+      const p = await detail(dritaId);
+      const r = p.reviews.find((x) => x.id === reviewId);
+      assert(r.reported && r.reportReason === 'Ky klient nuk më ka thirrur kurrë.', JSON.stringify(r));
+      for (const [body, status] of [[{ action: 'delete' }, 400], [{ reviewId: '00000000-0000-0000-0000-000000000000' }, 404], [{ id: 'test-d-k' }, 404], [{ id: 'nobody' }, 404]]) {
+        const x = await team('vleresim', { id: dritaId, reviewId, action: 'hide', ...body }, { cookie: ekipi1 });
+        assert(x.status === status, `${JSON.stringify(body)} → ${x.status}`);
+      }
+      assert((await api('/api/admin/vleresim', { id: dritaId, reviewId, action: 'hide' }, { cookie: drita })).status === 401, 'the mjeshtër moderated');
+      const keep = await team('vleresim', { id: dritaId, reviewId, action: 'keep' }, { cookie: ekipi1 });
+      assert(keep.status === 200 && !keep.data.pro.reviews.find((x) => x.id === reviewId).reported, `keep → ${keep.status}`);
+      assert((await team('vleresim', { id: dritaId, reviewId, action: 'keep' }, { cookie: ekipi1 })).status === 409, 'kept twice');
+      assert((await team('mjeshtrit', { status: 'reported' }, { cookie: ekipi1 })).data.counts.reported === 0, 'still listed');
+      const hide = await team('vleresim', { id: dritaId, reviewId, action: 'hide', note: 'Klienti nuk e ka thirrur.' }, { cookie: ekipi2 });
+      assert(hide.status === 200 && hide.data.pro.reviews.find((x) => x.id === reviewId).hidden, `hide → ${hide.status}`);
+      const page = await get(`${OPEN}${dritaPath}`);
+      assert(!page.html.includes('Nuk erdhi fare.') && page.html.includes('2,0 nga 5 · 1 vlerësim'), 'a hidden review is shown or counted');
+      assert((await me(drita)).data.dashboard.reviews.find((x) => x.id === reviewId).hidden, 'the mjeshtër doesn\'t see it hidden');
+      const show = await team('vleresim', { id: dritaId, reviewId, action: 'show' }, { cookie: ekipi1 });
+      assert(show.status === 200 && (await get(`${OPEN}${dritaPath}`)).html.includes('Nuk erdhi fare.'), 'not shown again');
+      const log = show.data.pro.log;
+      assert(log.slice(0, 3).map((l) => l.action).join() === 'review_show,review_hide,review_keep', log.map((l) => l.action).join());
+      assert(log[1].admin === TEAM[1] && log[1].note === 'Klienti nuk e ka thirrur.', JSON.stringify(log[1]));
+    });
+    await check('91. reviews rank a mjeshtër: good stars from a few reviews go ahead, a bad one falls behind', async () => {
+      const t = Date.now() - 86400000;
+      const row = (pro, stars, i) => `('rv-${pro}-${i}', '${pro}', 'seed-${pro}-${i}', ${t}, ${stars}, 'h-${pro}-${i}', 't-${pro}-${i}', 'visible', ${t}, ${t})`;
+      sql(`INSERT INTO reviews (id, pro_id, receipt, tapped_at, stars, email_hash, token_hash, status, created_at, confirmed_at) VALUES
+        ${[5, 5, 4].map((s, i) => row('test-d-b', s, i)).join(', ')}, ${row('test-d-k', 1, 0)}`);
+      const r = await get(`${OPEN}/kerko?zanati=bojaxhi&komuna=viti`);
+      // Bekim (4,7 from 3, a less complete profile) passes Kujtim (1 star, Verifikuar); Agron stays last, as he isn't taking work.
+      assert(cardsOf(r.html).join() === ['b', 'k', 'a'].map(H).join(), cardsOf(r.html).join());
+      assert(r.html.includes('4,7') && r.html.includes('3 vlerësime'), 'Bekim\'s stars');
+    });
+
+
     // Rebuilding dist/ under the running servers breaks their static files, so this comes last of the HTTP checks.
-    await check('81. the build: DIRECTORY_OPEN=1 swaps the homepage signup for the search box; without it the signup stays', async () => {
+    await check('92. the build: DIRECTORY_OPEN=1 swaps the homepage signup for the search box; without it the signup stays', async () => {
       const index = () => readFileSync(join(root, 'dist', 'index.html'), 'utf8');
       const build = (env) => execFileSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'ignore', env });
       let open = '';
@@ -1650,7 +1909,7 @@ async function main() {
 
 
     console.log('Logs');
-    await check('82. logs contain no team addresses, phone numbers, tokens or codes', async () => {
+    await check('93. logs contain no addresses, phone numbers, tokens or codes', async () => {
       // Photo ids and pro ids are random UUIDs, and their digits can look like a number or a code by chance: leave them out.
       const scanned = (devLog.slice(logStart) + openLog.slice(openLogStart)).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
       const at = (i) => JSON.stringify(scanned.slice(Math.max(0, i - 80), i + 40));
@@ -1664,6 +1923,7 @@ async function main() {
         assert(!scanned.includes(tokenOf(m)), 'a link token appears in the logs');
         assert(!new RegExp(`(?<!\\d)${codeOf(m)}(?!\\d)`).test(scanned), 'a link code appears in the logs');
       }
+      for (const m of mock.messages.filter((x) => x.subject === REVIEW_SUBJECT)) assert(!scanned.includes(reviewToken(m)), 'a review link token appears in the logs');
       for (const c of [ekipi1, ekipi2, ekipi3]) assert(!scanned.includes(c.split('=')[1]), 'a session token appears in the logs');
       for (const m of sms) {
         const code = (m.Body.match(/^(\d{6}) /) || [])[1];

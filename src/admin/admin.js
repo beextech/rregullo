@@ -11,7 +11,7 @@ import {
 } from './util.js';
 
 const PAGE_TITLE = 'Paneli i ekipit | Rregullo';
-const FILTERS = ['pending', 'changed', 'approved', 'rejected', 'suspended', 'draft', 'all'];
+const FILTERS = ['pending', 'changed', 'approved', 'rejected', 'suspended', 'draft', 'reported', 'all'];
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LIST_CAP = 200;
@@ -353,7 +353,7 @@ function renderList(data, status) {
         empty.append(a);
       }
     } else {
-      empty.append(status === 'pending' ? 'Askush nuk pret shqyrtim tani.' : 'Asnjë mjeshtër këtu.');
+      empty.append({ pending: 'Askush nuk pret shqyrtim tani.', reported: 'Asnjë vlerësim i raportuar tani.' }[status] || 'Asnjë mjeshtër këtu.');
     }
   }
   empty.hidden = items.length > 0;

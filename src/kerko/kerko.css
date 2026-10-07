@@ -117,3 +117,45 @@
 .calls-empty { margin-top: 24px; }
 
 .dir-foot { max-width: calc(760px + 2 * var(--gutter)); margin: 0 auto; padding: 24px var(--gutter) max(32px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--mute); font-size: 14px; }
+
+/* Stars and reviews */
+.dir-stars { color: var(--soft); font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.dir-stars > span[aria-hidden] { color: var(--lime); }
+.dir-stars-big { font-size: 15px; }
+.dir-h2-meta { margin-left: 6px; color: var(--mute); font-size: 15px; font-weight: 500; letter-spacing: 0; }
+.dir-reviews-note, .dir-reviews-none { margin-top: 8px; color: var(--mute); font-size: 14.5px; }
+.dir-reviews { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+.dir-review { padding: 16px 18px; border-radius: 16px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.dir-review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.dir-review-stars { color: var(--lime); letter-spacing: .08em; }
+.dir-review-who { color: var(--mute); font-size: 14px; }
+.dir-review-text { margin-top: 8px; color: var(--soft); overflow-wrap: anywhere; }
+.dir-review-text p + p, .dir-review-reply p + p { margin-top: 8px; }
+.dir-review-reply { margin-top: 12px; padding: 12px 14px; border-left: 2px solid var(--lime); border-radius: 0 10px 10px 0; background: rgba(241, 242, 239, .04); color: var(--soft); font-size: 15px; overflow-wrap: anywhere; }
+.dir-review-reply-who { color: var(--paper); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+
+/* "Si shkoi?" in Thirrjet e mia */
+.rate { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rate-title { font-weight: 700; font-size: 16px; }
+.rate-hint { margin-top: 4px; color: var(--mute); font-size: 14px; }
+.rate-stars { display: flex; gap: 4px; margin-top: 10px; border: 0; padding: 0; }
+.rate-stars legend { padding: 0; margin-bottom: 6px; color: var(--mute); font-size: 14px; }
+.rate-star { position: relative; }
+.rate-star input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rate-star span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; color: var(--mute); font-size: 26px; cursor: pointer; }
+.rate-star input:checked ~ span, .rate-star.is-lit span { color: var(--lime); }
+.rate-star input:focus-visible ~ span { outline: 2px solid var(--lime); outline-offset: 1px; }
+.rate-field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.rate-field label { color: var(--mute); font-size: 14px; font-weight: 500; }
+.rate-input, .rate-text {
+  width: 100%; padding: 12px 16px; border: 0; border-radius: 14px; background: rgba(241, 242, 239, .06); color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong); font: inherit; font-size: 16px;
+}
+.rate-text { min-height: 96px; resize: vertical; }
+.rate-input:focus, .rate-text:focus { outline: none; box-shadow: inset 0 0 0 2px var(--lime); }
+.rate-input[aria-invalid="true"], .rate-text[aria-invalid="true"] { box-shadow: inset 0 0 0 2px #FF8A7A; }
+.rate-note { margin-top: 10px; color: var(--mute); font-size: 13.5px; }
+.rate-note a { color: var(--paper); text-underline-offset: 3px; }
+.rate-send { margin-top: 14px; width: 100%; justify-content: center; }
+.rate-done { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(171, 226, 63, .08); box-shadow: inset 0 0 0 1px rgba(171, 226, 63, .35); color: var(--soft); font-size: 14.5px; }
+.rate-wait { margin-top: 12px; color: var(--mute); font-size: 14px; }

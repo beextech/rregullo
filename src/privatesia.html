@@ -22,7 +22,7 @@
 
 <main class="legal" id="main">
   <h1>Njoftimi për privatësi</h1>
-  <p class="updated">Për listën e njoftimit të lansimit, kërkimin e mjeshtrave, formularin “Je mjeshtër?”, panelin e mjeshtrit dhe panelin e ekipit në rregullo.net. Përditësuar më 6 tetor 2026.</p>
+  <p class="updated">Për listën e njoftimit të lansimit, kërkimin e mjeshtrave, formularin “Je mjeshtër?”, panelin e mjeshtrit dhe panelin e ekipit në rregullo.net. Përditësuar më 7 tetor 2026.</p>
 
   <h2>Shkurt</h2>
   <p><strong>Lista e lansimit:</strong> nëse e lë emailin në rregullo.net, e përdorim vetëm për me të lajmëru kur Rregullo të jetë gati. Nuk e shesim, nuk e japim për reklama dhe nuk të dërgojmë email marketingu pa pëlqimin tënd të veçantë. Mund të çregjistrohesh kurdo. <a href="#lista">Më shumë për listën</a></p>
@@ -95,7 +95,7 @@
   <p>Te paneli, te <strong>Llogaria</strong>, zgjedh <strong>Fshije llogarinë</strong>. Profili, fotot, numrat ditorë, historiku dhe hyrjet fshihen menjëherë. Nëse llogaria është pezulluar, ruajmë vetëm numrin, pezullimin dhe historikun e tij, që pezullimi të mbetet edhe nëse hyn prapë.</p>
 
   <h2 id="klientet">Kërkimi i mjeshtrave</h2>
-  <p>Kur të hapet, në rregullo.net/kerko zgjedh zanatin dhe komunën, i sheh profilet e mjeshtrave të aprovuar dhe i thërret ose u shkruan direkt. Klientët nuk kanë llogari, dhe për ta nuk ruajmë as emër, as numër, as email.</p>
+  <p>Kur të hapet, në rregullo.net/kerko zgjedh zanatin dhe komunën, i sheh profilet e mjeshtrave të aprovuar dhe i thërret ose u shkruan direkt. Klientët nuk kanë llogari, dhe për ta nuk ruajmë as emër, as numër. Emailin e ruajmë vetëm shkurt, nëse lë një vlerësim (shih më poshtë).</p>
   <h3>Çka numërojmë</h3>
   <p>Për secilin mjeshtër, çdo ditë, numërojmë sa herë është hapur profili i tij dhe sa herë është prekur Thirre, WhatsApp ose Viber. Mjeshtri i sheh këta numra te paneli i vet. Ruhen vetëm numrat, pa asnjë të dhënë për ty.</p>
   <p>Që një person të mos numërohet shumë herë, adresa IP përdoret vetëm në formë të koduar (një hash që ndryshon çdo ditë) dhe fshihet pas 24 orësh. Adresën IP nuk e ruajmë si të tillë.</p>
@@ -103,6 +103,17 @@
   <p>Kur e thërret ose i shkruan një mjeshtri, telefoni yt e ruan në listën “Thirrjet e mia”, që ta gjesh prapë: emrin, zanatin, numrin, lidhjen te profili dhe kur e ke kontaktuar. Telefoni mban mend edhe komunën që e ke kërkuar herën e fundit. Këto ruhen vetëm në shfletuesin tënd (localStorage) dhe nuk na dërgohen. I fshin te faqja “Thirrjet e mia” ose duke i fshirë të dhënat e shfletuesit.</p>
   <h3>Kur thërret ose shkruan</h3>
   <p>Thirrja shkon përmes operatorit tënd, ndërsa mesazhet përmes WhatsApp-it (Meta) ose Viber-it, sipas rregullave të tyre. Rregullo nuk i sheh bisedat dhe nuk ndërhyn në marrëveshjen tënde me mjeshtrin.</p>
+
+  <h2 id="vleresimet">Vlerësimet</h2>
+  <p>Kur prek Thirre, WhatsApp ose Viber, faqja i jep shfletuesit tënd një dëftesë të nënshkruar, që ruhet te “Thirrjet e mia”. Dëftesa përmban vetëm profilin, kohën e prekjes dhe një numër të rastësishëm, asgjë për ty. Me të, nga 12 orë deri në 60 ditë pas thirrjes, mund ta vlerësosh mjeshtrin te “Si shkoi?”.</p>
+  <ul>
+    <li><strong>Çka shfaqet publikisht</strong> në profilin e mjeshtrit: yjet, komenti, emri që zgjodhe ta shfaqësh (ose “Klient”), muaji dhe viti. Mjeshtri mund t’i përgjigjet një herë, publikisht.</li>
+    <li><strong>Emaili</strong> përdoret vetëm për ta dërguar lidhjen që e publikon vlerësimin, që të jemi të sigurt që e ke shkruar ti. Ruhet derisa ta konfirmosh, pastaj fshihet. Mbetet vetëm një hash i koduar i tij, që një email të ketë vetëm një vlerësim për të njëjtin mjeshtër (vlerësimi i ri e zëvendëson të vjetrin). Nga hash-i emaili nuk mund të lexohet.</li>
+    <li><strong>Vlerësimet e pakonfirmuara</strong> fshihen bashkë me emailin pas 48 orësh.</li>
+    <li><strong>Fshirja</strong>: me të njëjtën lidhje nga emaili mund ta fshish vlerësimin në çdo kohë. Vlerësimet fshihen edhe kur mjeshtri e fshin llogarinë.</li>
+    <li><strong>Raportimi</strong>: mjeshtri mund ta raportojë një vlerësim që e sheh të rremë ose fyes. Ekipi i Rregullo e lexon dhe vendos nëse mbetet apo fshihet nga profili.</li>
+  </ul>
+  <p>Që të mos dërgohen shumë vlerësime automatikisht, adresa IP dhe emaili përdoren për kufizim vetëm në formë të koduar, dhe ky regjistër fshihet pas 24 orësh.</p>
 
   <h2 id="ekipi">Ekipi i Rregullo</h2>
   <p>Paneli i ekipit në rregullo.net/admin është vetëm për anëtarët e ekipit të Rregullo. Ata hyjnë me email adresën e tyre të punës, me një lidhje dhe një kod që ua dërgojmë me email.</p>
@@ -120,12 +131,12 @@
   <p>Faqja kryesore, kërkimi dhe profilet e mjeshtrave nuk përdorin cookies, analitikë apo skripte gjurmuese të palëve të treta. “Thirrjet e mia” dhe komuna e fundit ruhen vetëm në shfletuesin tënd, si u tha më lart.</p>
   <p>Paneli i mjeshtrit përdor vetëm një cookie, “rr_mjeshtri”, dhe paneli i ekipit vetëm një, “rr_ekipi”. Secila të mban të kyçur në panelin e vet, nuk përdoret për asgjë tjetër dhe fshihet kur del.</p>
   <p>Kur e kërkon kodin e hyrjes, <strong>Cloudflare Turnstile</strong> kontrollon që nuk je robot. Për këtë kontroll Cloudflare e sheh adresën IP dhe disa të dhëna të shfletuesit.</p>
-  <p>Kur dërgon formularin e listës, kërkon kod hyrjeje, kërkon lidhje për panelin e ekipit, ose hap një profil dhe prek Thirre, WhatsApp ose Viber, adresa IP e kompjuterit ose telefonit tënd përdoret vetëm në formë të koduar (një hash që ndryshon çdo ditë), për me i kufizu kërkesat e shumta automatike. Ky regjistër fshihet pas 24 orësh. Adresën IP nuk e ruajmë si të tillë.</p>
+  <p>Kur dërgon formularin e listës, dërgon një vlerësim, kërkon kod hyrjeje, kërkon lidhje për panelin e ekipit, ose hap një profil dhe prek Thirre, WhatsApp ose Viber, adresa IP e kompjuterit ose telefonit tënd përdoret vetëm në formë të koduar (një hash që ndryshon çdo ditë), për me i kufizu kërkesat e shumta automatike. Ky regjistër fshihet pas 24 orësh. Adresën IP nuk e ruajmë si të tillë.</p>
 
   <h2>Kush i përpunon për ne</h2>
   <ul>
     <li><strong>Cloudflare</strong> e hoston faqen, bazën e të dhënave (Cloudflare D1) dhe fotot e mjeshtrave (Cloudflare R2), dhe e bën kontrollin kundër robotëve (Turnstile).</li>
-    <li><strong>Resend</strong> i dërgon emailat: njoftimin e lansimit dhe, për ekipin, lidhjet e hyrjes dhe njoftimet për profilet që presin shqyrtim.</li>
+    <li><strong>Resend</strong> i dërgon emailat: njoftimin e lansimit, lidhjen që e publikon vlerësimin dhe, për ekipin, lidhjet e hyrjes dhe njoftimet për profilet që presin shqyrtim.</li>
     <li><strong>Twilio</strong> i dërgon SMS-të: kodin e hyrjes dhe njoftimin kur profili aprovohet ose kthehet për ndryshime. Merr vetëm numrin tënd dhe tekstin e mesazhit.</li>
   </ul>
   <p>Këto kompani i përpunojnë të dhënat vetëm për me i ofru këto shërbime, dhe mund t’i përpunojnë edhe jashtë Kosovës.</p>

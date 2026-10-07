@@ -34,6 +34,8 @@ function busy(btn, on) {
   if (on) btn.setAttribute('aria-disabled', 'true'); else btn.removeAttribute('aria-disabled');
 }
 const isBusy = (btn) => btn.classList.contains('is-busy');
+// "4,6": by hand, as not every browser has Albanian number formats.
+const stars1 = (r) => r.toFixed(1).replace('.', ',');
 
 let toastTimer = 0;
 function toast(message) {
@@ -258,9 +260,114 @@ function renderBallina() {
   $('#stat-whatsapp').textContent = num(s.whatsapp);
   $('#stat-viber').textContent = num(s.viber);
   $('#stat-views').textContent = num(s.views);
-  $('#stat-rating').textContent = s.rating === null ? '–' : s.rating.toLocaleString('sq-AL', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  $('#stat-rating').textContent = s.rating === null ? '–' : stars1(s.rating);
   $('#stat-reviews').textContent = num(s.newReviews);
   $('#stats-note').hidden = s.calls + s.whatsapp + s.viber + s.views + s.reviews > 0;
+  renderReviews();
+}
+
+// ---------- reviews: one public reply each, or a report to the team ----------
+
+const REPLY_MAX = 400;
+const REASON_MAX = 300;
+const MONTHS = ['janar', 'shkurt', 'mars', 'prill', 'maj', 'qershor', 'korrik', 'gusht', 'shtator', 'tetor', 'nëntor', 'dhjetor'];
+const day = (t) => { const d = new Date(t); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
+let reviewForm = null;    // the open form: { id, kind: 'reply' | 'report' }
+
+function para(cls, text) {
+  const p = document.createElement('p');
+  p.className = cls;
+  p.textContent = text;
+  return p;
+}
+
+function smallButton(label, ghost, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = ghost ? 'btn btn-ghost' : 'btn';
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function reviewFormEl(r, kind) {
+  const form = document.createElement('form');
+  form.className = 'review-form';
+  form.noValidate = true;
+  const id = `rv-${kind}-${r.id}`;
+  const label = document.createElement('label');
+  label.className = 'pro-label';
+  label.htmlFor = id;
+  label.textContent = kind === 'reply' ? 'Përgjigja jote (e sheh kushdo, nuk ndryshohet më)' : 'Pse e raporton?';
+  const area = document.createElement('textarea');
+  area.className = 'field-input field-area';
+  area.id = id;
+  area.maxLength = kind === 'reply' ? REPLY_MAX : REASON_MAX;
+  area.rows = 3;
+  const err = para('field-error', '');
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  const send = document.createElement('button');
+  send.type = 'submit';
+  send.className = 'btn';
+  send.textContent = kind === 'reply' ? 'Publiko përgjigjen' : 'Dërgoje te ekipi';
+  const row = document.createElement('div');
+  row.className = 'review-form-row';
+  row.append(send, smallButton('Anulo', true, () => { reviewForm = null; renderReviews(); }));
+  form.append(label, area, err, row);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (isBusy(send)) return;
+    const text = area.value.trim();
+    if (!text) { setError(err, kind === 'reply' ? 'Shkruaje përgjigjen.' : 'Shkruaje shkurt pse e raporton.'); area.focus(); return; }
+    setError(err, '');
+    busy(send, true);
+    const { data } = kind === 'reply'
+      ? await api('/api/mjeshtri/pergjigju', { id: r.id, text })
+      : await api('/api/mjeshtri/raporto', { id: r.id, reason: text });
+    busy(send, false);
+    if (!isOpen) return;
+    if (!data.ok) { setError(err, data.message || GENERIC); return; }
+    reviewForm = null;
+    apply(data.dashboard);
+    toast(data.message);
+    $('#reviews-title').focus();
+  });
+  setTimeout(() => area.focus(), 0);
+  return form;
+}
+
+function renderReviews() {
+  const list = Array.isArray(dash.reviews) ? dash.reviews : [];
+  const shown = list.filter((r) => !r.hidden);
+  $('#reviews-meta').textContent = shown.length
+    ? `${dash.stats.rating === null ? '' : `${stars1(dash.stats.rating)} ★ · `}${shown.length === 1 ? '1 vlerësim' : `${shown.length} vlerësime`}`
+    : '';
+  const locked = dash.status === 'suspended';
+  $('#review-list').replaceChildren(...list.map((r) => {
+    const li = document.createElement('li');
+    li.className = r.hidden ? 'review-item is-hidden' : 'review-item';
+    const stars = para('review-stars', '★'.repeat(r.stars) + '☆'.repeat(5 - r.stars));
+    stars.setAttribute('aria-label', `${r.stars} nga 5 yje`);
+    li.append(stars, para('review-who', `${r.author || 'Klient'} · ${day(r.at)}`));
+    if (r.comment) li.append(para('review-text', r.comment));
+    if (r.reply) li.append(para('review-reply', `Përgjigja jote: ${r.reply}`));
+    if (r.hidden) li.append(para('review-note', 'Ekipi i Rregullos e fshehu këtë vlerësim. Klientët nuk e shohin.'));
+    else if (r.reported) li.append(para('review-note', `E raportove më ${day(r.reportedAt)}. Ekipi po e shikon.`));
+    if (reviewForm && reviewForm.id === r.id) {
+      li.append(reviewFormEl(r, reviewForm.kind));
+    } else if (!locked && !r.hidden && (!r.reply || !r.reported)) {
+      const actions = document.createElement('div');
+      actions.className = 'review-actions';
+      const open = (kind) => () => { reviewForm = { id: r.id, kind }; renderReviews(); };
+      if (!r.reply) actions.append(smallButton('Përgjigju', false, open('reply')));
+      if (!r.reported) actions.append(smallButton('Raporto', true, open('report')));
+      li.append(actions);
+    }
+    return li;
+  }));
+  $('#review-list').hidden = list.length === 0;
+  $('#reviews-empty').hidden = list.length > 0;
 }
 
 $('#available').addEventListener('click', async (e) => {

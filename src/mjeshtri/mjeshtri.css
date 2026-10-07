@@ -326,3 +326,20 @@
 /* The approved profile's public address, under the state card */
 .public-link { margin-top: 12px; color: var(--mute); font-size: 14.5px; overflow-wrap: anywhere; }
 .public-link a { color: var(--paper); text-decoration-color: rgba(171, 226, 63, .6); text-underline-offset: 3px; }
+
+/* Ballina: the clients' reviews, with the one reply and the report. */
+.review-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.review-item { padding: 14px 0; border-top: 1px solid var(--line); }
+.review-item:first-child { border-top: 0; }
+.review-item.is-hidden { opacity: .72; }
+.review-stars { color: var(--lime); letter-spacing: 1px; }
+.review-who { margin-top: 2px; color: var(--mute); font-size: 13.5px; overflow-wrap: anywhere; }
+.review-text { margin-top: 6px; color: var(--soft); white-space: pre-line; overflow-wrap: anywhere; }
+.review-reply { margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--soft); font-size: 14.5px; white-space: pre-line; overflow-wrap: anywhere; }
+.review-note { margin-top: 8px; color: var(--mute); font-size: 14px; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.review-actions .btn { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.review-form { margin-top: 10px; }
+.review-form .field-area { min-height: 88px; }
+.review-form-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.review-form-row .btn { min-height: 40px; padding: 0 14px; font-size: 14px; }

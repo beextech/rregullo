@@ -1,17 +1,18 @@
 // The public directory's routes (step 4):
 //   GET  /kerko?zanati=&komuna=&faqja=   search results, rendered on the server
 //   GET  /m/<name>-<handle>              one mjeshtër's profile (a stale name part redirects to the current one)
-//   POST /api/numero  { m, lloji }       counts a profile view or a tap on Thirre, WhatsApp or Viber
+//   POST /api/numero  { m, lloji }       counts a profile view or a tap on Thirre, WhatsApp or Viber; a tap on an
+//                                        approved profile also gets { receipt }, which "Si shkoi?" needs to review
 //   GET  /sitemap.xml                    the static sitemap, plus /kerko and every approved profile once the directory is open
 // Until DIRECTORY_OPEN is "1" the pages show "coming soon" to everyone but the signed-in team, and nothing is counted.
 
 import { currentAdmin, readAdminConfig } from '../server/admin.js';
 import {
-  countTap, directoryOpen, handleFromSlug, loadPublicProfile, readSearch, search, sitemapEntries,
+  countTap, directoryOpen, receiptFor, handleFromSlug, loadPublicProfile, readSearch, search, sitemapEntries,
 } from '../server/directory.js';
 import { profilePage, searchPage } from '../server/directory-pages.js';
 import { esc, homeLink, page } from '../server/pages.js';
-import { crossSite, notAllowed, readJson } from '../server/http.js';
+import { crossSite, json, notAllowed, readJson } from '../server/http.js';
 import { currentPro, missingCoreConfig, signinMaintenance } from '../server/signin.js';
 import { log } from '../server/subscribers.js';
 
@@ -92,7 +93,8 @@ export const profili = {
 const counted = () => new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
 
 export const numero = {
-  // Always 204, counted or not: a caller learns nothing about which profiles exist or what was counted.
+  // 204, counted or not, so a caller learns nothing about what was counted. A tap on an approved profile answers 200
+  // with a receipt instead (the profile is public anyway); never for the team or the mjeshtër's own profile.
   async onRequestPost({ request, env, waitUntil }) {
     if (crossSite(request)) return counted();
     const input = await readJson(request);
@@ -110,6 +112,8 @@ export const numero = {
       await countTap(cfg, m, lloji, request.headers.get('CF-Connecting-IP'), now);
       // Now and then, clear the day-old records the counting leaves behind.
       if (Math.random() < 0.02) waitUntil(signinMaintenance(cfg, now).catch((e) => log('maintenance_failed', { reason: e.message })));
+      const receipt = await receiptFor(cfg, m, lloji, now);
+      if (receipt) return json(200, { ok: true, receipt });
     } catch (e) {
       log('tap_error', { reason: e.message });
     }

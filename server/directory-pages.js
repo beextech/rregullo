@@ -6,6 +6,7 @@ import { CSS_HASH, DIR_CSS_HASH, DIR_JS_HASH } from './build-info.js';
 import { TOWNS, TRADES, labelOf } from '../src/mjeshtri/catalog.js';
 import { LOGO, esc } from './pages.js';
 import { searchForm } from './search-form.js';
+import { ratingText, reviewsText } from './reviews.js';
 import { formatPhone } from './signin.js';
 
 const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; manifest-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
@@ -22,6 +23,14 @@ export function yearsText(n) {
 }
 
 const count = (n) => `${n} mjeshtër`;
+
+// "★ 4,6 · 12 vlerësime", with the stars read out as words.
+const stars = (p, cls = 'dir-stars') => (p.reviews
+  ? `<span class="${cls}"><span aria-hidden="true">★ </span><span class="visually-hidden">Vlerësimi </span>${esc(ratingText(p.rating))}<span class="visually-hidden"> nga 5</span> · ${esc(reviewsText(p.reviews))}</span>`
+  : '');
+
+const MONTHS = ['janar', 'shkurt', 'mars', 'prill', 'maj', 'qershor', 'korrik', 'gusht', 'shtator', 'tetor', 'nëntor', 'dhjetor'];
+const monthYear = (ms) => { const d = new Date(ms); return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 
 // The towns, with the one searched for first, shortened after three.
 function townsLine(labels, first) {
@@ -132,6 +141,7 @@ function card(p, town) {
     <span class="dir-card-who">
       <span class="dir-name">${esc(p.name)}${badge(p)}</span>
       <span class="dir-trades">${esc(p.tradeLabels.join(' · '))}</span>
+      ${stars(p)}
       <span class="dir-facts">${esc(facts)}</span>
       ${p.priceNote ? `<span class="dir-price">${esc(p.priceNote)}</span>` : ''}
     </span>
@@ -205,9 +215,28 @@ function jsonLd(siteUrl, p) {
     areaServed: p.townLabels.map((name) => ({ '@type': 'City', name })),
     knowsAbout: p.tradeLabels,
     ...(p.priceNote ? { priceRange: p.priceNote } : {}),
+    ...(p.reviews ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviews, bestRating: 5, worstRating: 1 } } : {}),
   };
   // In a <script> block, "</" or "<!--" in someone's text must not end it.
   return JSON.stringify(data).replace(/</g, '\\u003c');
+}
+
+function reviewsSection(p) {
+  if (!p.reviewList.length) {
+    return `<section class="dir-section" aria-labelledby="reviews-title"><h2 class="dir-h2" id="reviews-title">Vlerësimet</h2>
+  <p class="dir-reviews-none">Ende pa vlerësime. Vlerësojnë vetëm klientët që e kanë thirrur nga Rregullo, dhe çdo vlerësim konfirmohet me email.</p></section>`;
+  }
+  const items = p.reviewList.map((r) => `<li class="dir-review">
+    <p class="dir-review-head"><span class="dir-review-stars" aria-hidden="true">${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}</span><span class="visually-hidden">${r.stars} nga 5 yje</span>
+      <span class="dir-review-who">${esc(r.author || 'Klient')} · ${esc(monthYear(r.at))}</span></p>
+    ${r.comment ? `<div class="dir-review-text">${paragraphs(r.comment)}</div>` : ''}
+    ${r.reply ? `<div class="dir-review-reply"><p class="dir-review-reply-who">Përgjigja e ${esc(p.name)}</p>${paragraphs(r.reply)}</div>` : ''}
+  </li>`).join('');
+  return `<section class="dir-section" aria-labelledby="reviews-title">
+  <h2 class="dir-h2" id="reviews-title">Vlerësimet <span class="dir-h2-meta">${esc(ratingText(p.rating))} nga 5 · ${esc(reviewsText(p.reviews))}</span></h2>
+  <p class="dir-reviews-note">Vlerësojnë vetëm klientët që e kanë thirrur nga Rregullo, dhe çdo vlerësim konfirmohet me email.</p>
+  <ul class="dir-reviews">${items}</ul>
+</section>`;
 }
 
 /** One mjeshtër's public profile. */
@@ -228,7 +257,7 @@ export function profilePage(siteUrl, p, { preview = false } = {}) {
     <div>
       <h1 class="dir-profile-name">${esc(p.name)}${badge(p)}</h1>
       <p class="dir-trades">${esc(p.tradeLabels.join(' · '))}</p>
-      <p class="dir-rating">Ende pa vlerësime</p>
+      <p class="dir-rating">${p.reviews ? stars(p, 'dir-stars dir-stars-big') : 'Ende pa vlerësime'}</p>
     </div>
   </header>
   ${available(p)}
@@ -237,6 +266,7 @@ export function profilePage(siteUrl, p, { preview = false } = {}) {
   <ul class="dir-profile-facts">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
   ${p.about ? `<section class="dir-section" aria-labelledby="about-title"><h2 class="dir-h2" id="about-title">Rreth meje</h2><div class="dir-about">${paragraphs(p.about)}</div></section>` : ''}
   ${work}
+  ${reviewsSection(p)}
 </article>`;
   const trade = p.tradeLabels[0] || 'Mjeshtër';
   const town = p.townLabels[0] ? ` në ${p.townLabels[0]}` : '';

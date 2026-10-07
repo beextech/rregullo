@@ -172,29 +172,74 @@ Ky email u dërgua sepse dikush kërkoi të hyjë në panelin e ekipit të Rregu
   return { subject, html, text };
 }
 
-/** To the team: the approval queue has something new. No name, number or id: only the count and the panel's link. */
-export function adminQueueEmail({ siteUrl, pendingCount }) {
-  const subject = 'Një profil i ri pret shqyrtim';
+/**
+ * To the team: the approval queue has something new (a profile sent for approval, or a review a mjeshtër reported).
+ * No name, number or id: only the counts and the panel's link.
+ */
+export function adminQueueEmail({ siteUrl, pendingCount, reportedCount = 0 }) {
+  const reviewsOnly = !pendingCount && reportedCount > 0;
+  const subject = reviewsOnly ? 'Një vlerësim i raportuar pret shqyrtim' : 'Një profil i ri pret shqyrtim';
   const listUrl = `${siteUrl}/admin/#lista`;
   const waiting = pendingCount === 1 ? '1 profil' : `${pendingCount} profile`;
+  const reported = reportedCount === 1 ? '1 vlerësim i raportuar' : `${reportedCount} vlerësime të raportuara`;
+  const lead = reviewsOnly ? 'Një mjeshtër e raportoi një vlerësim.' : 'Një mjeshtër e dërgoi profilin për aprovim.';
+  const counts = `Në pritje tani: ${waiting}${reportedCount ? ` dhe ${reported}` : ''}.`;
   const html = layout({
     siteUrl,
-    preheader: `Në pritje tani: ${waiting}.`,
+    preheader: counts,
     bodyHtml: [
-      `<h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${PAPER};">Një profil i ri pret shqyrtim</h1>`,
-      p(`Një mjeshtër e dërgoi profilin për aprovim. Në pritje tani: ${waiting}.`, 'margin-bottom:0;'),
+      `<h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${PAPER};">${esc(subject)}</h1>`,
+      p(`${lead} ${counts}`, 'margin-bottom:0;'),
       button(listUrl, 'Hape panelin e ekipit'),
     ].join('\n'),
     footerHtml: 'Ky email u dërgua sepse adresa jote është në listën e ekipit të Rregullo. Të dërgojmë më së shumti një të tillë në orë.',
   });
-  const text = `Një profil i ri pret shqyrtim
+  const text = `${subject}
 
-Një mjeshtër e dërgoi profilin për aprovim. Në pritje tani: ${waiting}.
+${lead} ${counts}
 
 Hape panelin e ekipit: ${listUrl}
 
 --
 Ky email u dërgua sepse adresa jote është në listën e ekipit të Rregullo. Të dërgojmë më së shumti një të tillë në orë.
+`;
+  return { subject, html, text };
+}
+
+/**
+ * To a client who reviewed a mjeshtër: the link that publishes the review. The same link later lets them delete it.
+ * Says which mjeshtër and how many stars, so someone who didn't write it can tell and ignore it.
+ */
+export function reviewConfirmEmail({ siteUrl, confirmUrl, proName, stars, ttlHours }) {
+  const subject = 'Konfirmo vlerësimin tënd në Rregullo';
+  const starsText = stars === 1 ? '1 yll' : `${stars} yje`;
+  const html = layout({
+    siteUrl,
+    preheader: `Kliko për ta publikuar vlerësimin për ${proName}.`,
+    bodyHtml: [
+      `<h1 style="margin:0 0 20px;font-size:24px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;color:${PAPER};">Faleminderit për vlerësimin!</h1>`,
+      p(`E vlerësove ${proName} me ${starsText}. Kliko butonin dhe vlerësimi yt shfaqet në profilin e mjeshtrit.`, 'margin-bottom:0;'),
+      button(confirmUrl, 'Publiko vlerësimin'),
+      `<p style="margin:0 0 16px;color:${MUTE};font-size:14px;">Lidhja e publikon vlerësimin brenda ${ttlHours} orësh. Ruaje këtë email: me të njëjtën lidhje mund ta fshish vlerësimin më vonë. Nëse butoni nuk punon, kopjoje këtë adresë në shfletues:<br><a href="${esc(confirmUrl)}" style="color:${PAPER};word-break:break-all;">${esc(confirmUrl)}</a></p>`,
+      p('Me respekt,', 'margin:24px 0 0;'),
+      p('Ekipi Rregullo', 'margin:0;font-weight:700;'),
+    ].join('\n'),
+    footerHtml: `Ky email u dërgua sepse dikush e vlerësoi një mjeshtër në Rregullo me këtë adresë. Nëse nuk e ke bërë ti, mos bëj asgjë: vlerësimi nuk shfaqet dhe fshihet pas ${ttlHours} orësh.<br><a href="${esc(siteUrl)}/privatesia#klientet" style="color:${MUTE};">Njoftimi për privatësi</a>`,
+  });
+  const text = `Faleminderit për vlerësimin!
+
+E vlerësove ${proName} me ${starsText}. Kliko lidhjen dhe vlerësimi yt shfaqet në profilin e mjeshtrit.
+
+Publiko vlerësimin: ${confirmUrl}
+
+Lidhja e publikon vlerësimin brenda ${ttlHours} orësh. Ruaje këtë email: me të njëjtën lidhje mund ta fshish vlerësimin më vonë.
+
+Me respekt,
+Ekipi Rregullo
+
+--
+Ky email u dërgua sepse dikush e vlerësoi një mjeshtër në Rregullo me këtë adresë. Nëse nuk e ke bërë ti, mos bëj asgjë: vlerësimi nuk shfaqet dhe fshihet pas ${ttlHours} orësh.
+Njoftimi për privatësi: ${siteUrl}/privatesia#klientet
 `;
   return { subject, html, text };
 }

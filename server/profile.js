@@ -4,6 +4,7 @@
 
 import { LIMITS, TOWN_SLUGS, TRADE_SLUGS } from '../src/mjeshtri/catalog.js';
 import { profilePath } from './handle.js';
+import { confirmedReviews, reviewStats } from './reviews.js';
 import { formatPhone } from './signin.js';
 import { log } from './subscribers.js';
 
@@ -165,8 +166,8 @@ async function loadStats(db, proId, now) {
             COALESCE(SUM(whatsapp), 0) AS whatsapp, COALESCE(SUM(viber), 0) AS viber
      FROM pro_stats_daily WHERE pro_id = ?1 AND day > ?2`,
   ).bind(proId, utcDay(now - STATS_DAYS * DAY)).first();
-  // Reviews arrive with step 5; until then there are none.
-  return { days: STATS_DAYS, views: row.views, calls: row.calls, whatsapp: row.whatsapp, viber: row.viber, rating: null, reviews: 0, newReviews: 0 };
+  const r = await reviewStats(db, proId, now, STATS_DAYS);
+  return { days: STATS_DAYS, views: row.views, calls: row.calls, whatsapp: row.whatsapp, viber: row.viber, ...r };
 }
 
 /** Everything the dashboard shows, in one answer. */
@@ -181,7 +182,7 @@ export async function loadDashboard(cfg, proId, now) {
     name: row.name, about: row.about, trades: parseList(row.trades), towns: parseList(row.towns), years: row.years,
     priceNote: row.price_note, whatsapp: row.whatsapp === 1, viber: row.viber === 1,
   };
-  const [photos, stats] = await Promise.all([loadPhotos(db, proId), loadStats(db, proId, now)]);
+  const [photos, stats, reviews] = await Promise.all([loadPhotos(db, proId), loadStats(db, proId, now), confirmedReviews(db, proId)]);
   return {
     phone: formatPhone(row.phone),
     profile,
@@ -195,6 +196,7 @@ export async function loadDashboard(cfg, proId, now) {
     photos,
     photosEnabled: Boolean(cfg.photos),
     stats,
+    reviews,
     checklist: checklist(profile, photos, Boolean(cfg.photos)),
   };
 }
@@ -269,6 +271,7 @@ export async function deleteAccount(cfg, pro, now) {
   const [removed] = await db.batch([
     db.prepare('DELETE FROM pro_photos WHERE pro_id = ?1 RETURNING id').bind(pro.id),
     db.prepare('DELETE FROM pro_stats_daily WHERE pro_id = ?1').bind(pro.id),
+    db.prepare('DELETE FROM reviews WHERE pro_id = ?1').bind(pro.id),
     db.prepare("DELETE FROM sessions WHERE kind = 'pro' AND subject = ?1").bind(pro.id),
     kept
       ? db.prepare(`UPDATE pros SET name = '', about = '', trades = '[]', towns = '[]', years = NULL, price_note = '',

@@ -463,6 +463,24 @@ Table: `reviews` (`migrations/0006_vleresimet.sql`), deleted with the mjeshtër.
 
 **Setup:** `npm run db:migrate` applies `0006`. Reviews need the directory open and Resend working: until `rregullo.net` is verified in Resend, only the Resend account's own address receives the links.
 
+## Ads (step 6)
+
+Companies that sell repair products can advertise. Every ad is marked "Sponsorizuar · <company>", there's no payment in the platform, and no ad network or tracking script: views and clicks are counted on our own server.
+
+1. **The team** adds advertisers and their campaigns in `/admin` → Reklamat: a title, an `https://` link, an optional image (needs R2; without it the ad is a text card), the slots, the trades and towns (empty means all), start and end dates, and on/off.
+2. **Slots:** `kerko` (search results, after the 3rd result), `profili` (under a profile), `loja` (the games page) and `paneli` (an offer on the mjeshtër's Ballina, matched to their trades and towns). Search and profile ads are in the page itself; the other two come from `GET /api/reklama?vendi=&zanati=&komuna=` (204 when nothing fits). When several campaigns fit, one is picked at random.
+3. **Counting:** a view is counted when half the ad is on screen (`POST /api/reklama`), a click at `/r/<id>?v=<slot>`, which then sends the visitor to the link. Each counts once a day per campaign, slot and network address (stored as a keyed hash, like the rest of the site), at most 300 a day per address, only while the campaign is live, and never for the team. Days are UTC.
+4. **Report:** each advertiser's card has "Shkarko raportin (CSV)" for a month: a row per campaign, day and slot, plus totals (`GET /api/admin/raporti?reklamuesi=<id>&muaji=YYYY-MM`).
+
+Tables: `advertisers`, `campaigns`, `ad_stats_daily` (`migrations/0007_reklamat.sql`). Deleting an advertiser deletes its campaigns, images and counts.
+
+**Setup:** `npm run db:migrate` applies `0007`. Images need the R2 bucket (see the panel's photos).
+
+## Launch (step 7)
+
+- **Terms of use** are at `/kushtet` (`src/kushtet.html`), linked from every footer. The privacy notice now also covers reviews and ads.
+- **Checklist, in order:** apply migrations `0002`–`0007` → set the secrets and settings → verify `rregullo.net` in Resend → turn on R2 → sign up the first mjeshtër town by town from `/admin` → native speaker and legal review → `DIRECTORY_OPEN = "1"` and deploy → check the live site → send the launch email (see "Launch day"), only when the owner says so.
+
 ## Before launch, please also
 
 - **Native speaker check:** have someone from Kosovo read all the new copy:
@@ -476,5 +494,7 @@ Table: `reviews` (`migrations/0006_vleresimet.sql`), deleted with the mjeshtër.
 - **Native speaker check for `/admin`:** the team screens, the sign-in email, the "new profile" email, the approve and reject SMS texts, and the privacy notice's new and changed parts ("Paneli i mjeshtrit", "Ekipi i Rregullo", cookies).
 - **Native speaker check for the directory:** `/kerko`, the profile pages, `/thirrjet`, the homepage search box and the privacy notice's "Kërkimi i mjeshtrave" part.
 - **Native speaker check for reviews:** "Si shkoi?" on `/thirrjet`, the confirmation email and pages, the reviews on profiles, Ballina and `/admin`, and the privacy notice's "Vlerësimet" part.
+- **Native speaker check for ads and terms:** `/kushtet`, the "Sponsorizuar" cards, the Reklamat screens in `/admin` and the privacy notice's "Reklamat" part.
+- **Legal review of the terms** (`/kushtet`) together with the privacy notice.
 - **Open the directory** (`DIRECTORY_OPEN = "1"`) before sending the launch email, which says Rregullo is available.
 - **Team access:** set `ADMIN_EMAILS`, verify `rregullo.net` in Resend and move `EMAIL_FROM` off the test sender, otherwise only the Resend account's own address gets sign-in links.

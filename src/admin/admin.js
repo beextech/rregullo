@@ -5,6 +5,7 @@
 
 import { GENERIC, api } from '/mjeshtri/api.js';
 import { TOWNS, TRADES, labelOf } from '/mjeshtri/catalog.js';
+import { closeAds, openAds, openCampaign } from './ads.js';
 import { closeDetail, leaveDetail, openDetail, setMe, unsaved } from './detail.js';
 import {
   $, STATUS, announce, busy, countText, initials, isBusy, setError, since, toast,
@@ -203,6 +204,7 @@ function signedOut(message) {
   me = null;
   page = '';
   closeDetail();
+  closeAds();
   clearTimeout(searchTimer);
   listSeq++;
   $('#rows').replaceChildren();
@@ -230,11 +232,14 @@ window.addEventListener('rr:signedout', () => {
   if (me) signedOut('Nuk je më i kyçur. Hyr prapë me emailin e ekipit.');
 });
 
-// ---------- routing: #lista[/filter], #m/<id>, #shto ----------
+// ---------- routing: #lista[/filter], #m/<id>, #shto, #reklamat, #fushata/<id>, #fushata/re/<advertiser id> ----------
 
 function parseRoute() {
   const h = location.hash.slice(1);
   if (h === 'shto') return { name: 'add' };
+  if (h === 'reklamat') return { name: 'ads' };
+  const c = /^fushata\/(re\/)?([0-9a-f-]{36})$/.exec(h);
+  if (c) return c[1] ? { name: 'campaign', advertiser: c[2] } : { name: 'campaign', id: c[2] };
   const m = /^m\/([A-Za-z0-9-]{1,64})$/.exec(h);
   if (m) return { name: 'detail', id: m[1] };
   const l = /^lista\/(\w+)$/.exec(h);
@@ -254,6 +259,14 @@ function route(focus) {
     showPage('detail');
     document.title = `Mjeshtri · ${PAGE_TITLE}`;
     openDetail(r.id, { focus, back: `#lista/${filter}` });
+  } else if (r.name === 'ads') {
+    showPage('ads');
+    document.title = `Reklamat · ${PAGE_TITLE}`;
+    openAds(focus);
+  } else if (r.name === 'campaign') {
+    showPage('campaign');
+    document.title = `Reklama · ${PAGE_TITLE}`;
+    openCampaign(r, focus);
   } else if (r.name === 'add') {
     showPage('add');
     $('#add-back').href = `#lista/${filter}`;

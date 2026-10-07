@@ -343,3 +343,4 @@
 .review-form .field-area { min-height: 88px; }
 .review-form-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .review-form-row .btn { min-height: 40px; padding: 0 14px; font-size: 14px; }
+.panel-ad .ad { margin: 0; }

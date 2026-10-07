@@ -99,7 +99,10 @@
           <p class="eyebrow">Paneli i ekipit</p>
           <h1 class="pro-title" id="list-title" tabindex="-1">Mjeshtrit</h1>
         </div>
-        <a class="btn btn-primary list-add" href="#shto">Shto mjeshtër</a>
+        <div class="list-actions">
+          <a class="btn btn-ghost list-add" href="#reklamat">Reklamat</a>
+          <a class="btn btn-primary list-add" href="#shto">Shto mjeshtër</a>
+        </div>
       </div>
 
       <nav class="filters-nav" aria-label="Gjendja e profilit">
@@ -326,6 +329,92 @@
       </div>
     </section>
 
+    <!-- Ads: advertisers and their campaigns -->
+    <section class="admin-section admin-ads" data-page="ads" hidden aria-labelledby="ads-title">
+      <a class="back-link" href="#lista"><span aria-hidden="true">‹</span> Mjeshtrit</a>
+      <div class="list-head">
+        <div>
+          <p class="eyebrow">Paneli i ekipit</p>
+          <h1 class="pro-title" id="ads-title" tabindex="-1">Reklamat</h1>
+        </div>
+        <button class="btn btn-primary list-add" type="button" id="adv-new">Shto reklamues</button>
+      </div>
+      <p class="pro-text ads-intro">Kompanitë që shesin materiale dhe vegla. Çdo reklamë shfaqet vetëm te zanatet dhe komunat e saj, mes datave të saj, gjithmonë me shënimin «Sponsorizuar». Shikimet dhe klikimet numërohen një herë në ditë për person.</p>
+      <p class="form-error" id="ads-error" role="alert" hidden></p>
+      <div id="ads-list" aria-busy="true"></div>
+      <p class="pro-hint" id="ads-empty" hidden>Ende asnjë reklamues. Shto të parin me butonin lart.</p>
+    </section>
+
+    <!-- One campaign -->
+    <section class="admin-section admin-campaign" data-page="campaign" hidden aria-labelledby="c-title">
+      <a class="back-link" href="#reklamat"><span aria-hidden="true">‹</span> Reklamat</a>
+      <p class="eyebrow" id="c-advertiser"></p>
+      <h1 class="pro-title" id="c-title" tabindex="-1">Reklamë e re</h1>
+      <p class="form-error" id="c-load-error" role="alert" hidden></p>
+      <div class="campaign-grid" id="c-body">
+        <form class="panel pro-form" id="c-form" novalidate>
+          <div class="field">
+            <label class="pro-label" for="c-text">Teksti i reklamës</label>
+            <input class="field-input" id="c-text" name="title" type="text" maxlength="90" autocomplete="off" aria-describedby="c-text-hint c-text-error">
+            <p class="pro-hint" id="c-text-hint">P.sh. «Bojëra Fasada -20% deri në fund të muajit». Deri në 90 shkronja.</p>
+            <p class="field-error" id="c-text-error" hidden></p>
+          </div>
+          <div class="field">
+            <label class="pro-label" for="c-link">Adresa ku të çon</label>
+            <input class="field-input" id="c-link" name="link" type="url" inputmode="url" maxlength="500" autocomplete="off" placeholder="https://" aria-describedby="c-link-error">
+            <p class="field-error" id="c-link-error" hidden></p>
+          </div>
+          <fieldset class="field" aria-describedby="c-slots-error">
+            <legend class="pro-label">Ku shfaqet</legend>
+            <div class="check-grid" id="c-slots"></div>
+            <p class="field-error" id="c-slots-error" hidden></p>
+          </fieldset>
+          <fieldset class="field">
+            <legend class="pro-label">Zanatet</legend>
+            <p class="pro-hint">Pa asnjë të zgjedhur: për të gjitha zanatet. Me disa të zgjedhur, shfaqet vetëm aty ku dihet zanati (kërkimi, profilet, paneli).</p>
+            <div class="check-grid" id="c-trades"></div>
+          </fieldset>
+          <fieldset class="field">
+            <legend class="pro-label">Komunat</legend>
+            <p class="pro-hint">Pa asnjë të zgjedhur: gjithë Kosova.</p>
+            <div class="check-grid check-grid-wide" id="c-towns"></div>
+          </fieldset>
+          <fieldset class="field date-row" aria-describedby="c-dates-error">
+            <legend class="pro-label">Kur</legend>
+            <label class="date-field"><span class="pro-hint">Nga</span><input class="field-input" id="c-start" type="date"></label>
+            <label class="date-field"><span class="pro-hint">Deri</span><input class="field-input" id="c-end" type="date"></label>
+            <p class="field-error" id="c-dates-error" hidden></p>
+          </fieldset>
+          <label class="consent">
+            <input class="consent-box" type="checkbox" id="c-active" checked>
+            <span class="consent-label">E ndezur (hiqe për ta ndalur pa e fshirë)</span>
+          </label>
+          <p class="form-error" id="c-error" role="alert" hidden></p>
+          <div class="campaign-actions">
+            <button class="btn btn-primary" type="submit" id="c-save"><span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Ruaje reklamën</span></button>
+            <button class="btn btn-danger" type="button" id="c-delete" hidden><span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije</span></button>
+          </div>
+        </form>
+        <div class="campaign-side">
+          <section class="panel" aria-labelledby="c-image-title">
+            <h2 class="panel-title" id="c-image-title">Foto</h2>
+            <p class="pro-hint" id="c-image-hint">Jo e detyrueshme. Pa foto, reklama shfaqet vetëm me tekst. Fotoja ngarkohet pasi ta ruash reklamën.</p>
+            <img class="campaign-img" id="c-image" alt="" hidden>
+            <input class="visually-hidden photo-input" type="file" id="c-image-input" accept="image/*">
+            <div class="campaign-actions">
+              <label class="btn btn-ghost photo-pick" for="c-image-input" id="c-image-pick">Zgjidh foton</label>
+              <button class="btn btn-ghost" type="button" id="c-image-remove" hidden>Hiqe foton</button>
+            </div>
+            <p class="photo-status" id="c-image-status" role="status"></p>
+          </section>
+          <section class="panel" aria-labelledby="c-preview-title">
+            <h2 class="panel-title" id="c-preview-title">Si duket</h2>
+            <div id="c-preview"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
     <!-- Add a mjeshtër -->
     <section class="admin-section admin-add" data-page="add" hidden aria-labelledby="add-title">
       <a class="back-link" href="#lista" id="add-back"><span aria-hidden="true">‹</span> Mjeshtrit</a>
@@ -430,6 +519,33 @@
       <button class="btn btn-danger" type="submit" id="remove-go" disabled>
         <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije përgjithmonë</span>
       </button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Dialog: add or change an advertiser -->
+<dialog class="sheet" id="adv-sheet" aria-labelledby="adv-sheet-title">
+  <h2 class="sheet-title" id="adv-sheet-title">Reklamues i ri</h2>
+  <form class="sheet-form" id="adv-form" novalidate>
+    <div class="field">
+      <label class="pro-label" for="adv-name">Emri i kompanisë (shfaqet te reklama)</label>
+      <input class="field-input" id="adv-name" type="text" maxlength="80" autocomplete="off" aria-describedby="adv-name-error">
+      <p class="field-error" id="adv-name-error" hidden></p>
+    </div>
+    <div class="field">
+      <label class="pro-label" for="adv-contact">Kontakti (vetëm për ekipin)</label>
+      <input class="field-input" id="adv-contact" type="text" maxlength="200" autocomplete="off">
+      <p class="pro-hint">Emri, telefoni ose emaili i personit me të cilin flisni.</p>
+    </div>
+    <p class="form-error" id="adv-error" role="alert" hidden></p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-close>Anulo</button>
+      <button class="btn btn-primary" type="submit" id="adv-go"><span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Ruaje</span></button>
+    </div>
+    <div class="sheet-danger" id="adv-delete-box" hidden>
+      <label class="pro-label" for="adv-confirm">Për ta fshirë bashkë me të gjitha reklamat dhe numrat, shkruaj FSHIJE</label>
+      <input class="field-input" id="adv-confirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10">
+      <button class="btn btn-danger" type="button" id="adv-delete" disabled><span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije reklamuesin</span></button>
     </div>
   </form>
 </dialog>

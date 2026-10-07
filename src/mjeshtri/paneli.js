@@ -5,6 +5,7 @@
 import { GENERIC, api, uploadJpeg } from './api.js';
 import { LIMITS, TOWNS, TRADES, labelOf } from './catalog.js';
 import { shrinkPhoto } from './photo.js';
+import { fill as fillAd } from '/reklama.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const TABS = ['ballina', 'profili', 'foto', 'llogaria'];
@@ -264,6 +265,21 @@ function renderBallina() {
   $('#stat-reviews').textContent = num(s.newReviews);
   $('#stats-note').hidden = s.calls + s.whatsapp + s.viber + s.views + s.reviews > 0;
   renderReviews();
+  renderOffer();
+}
+
+// An offer from a company that sells what this mjeshtër works with, marked Sponsorizuar. Loaded again only when
+// the trades or towns change.
+let offerFor = null;
+function renderOffer() {
+  const slot = $('#offer');
+  const key = `${dash.profile.trades.join(',')}|${dash.profile.towns.join(',')}`;
+  if (dash.status !== 'approved' || !dash.profile.trades.length) { slot.hidden = true; offerFor = null; return; }
+  if (offerFor === key) return;
+  offerFor = key;
+  slot.dataset.zanati = dash.profile.trades.join(',');
+  slot.dataset.komuna = dash.profile.towns.join(',');
+  fillAd(slot);
 }
 
 // ---------- reviews: one public reply each, or a report to the team ----------

@@ -28,6 +28,10 @@
 /kerko/*
   Cache-Control: public, max-age=31536000, immutable
 
+# The ads script is imported without a version by several pages, so it is always checked.
+/reklama.js
+  Cache-Control: no-cache
+
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 

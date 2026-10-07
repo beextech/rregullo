@@ -17,6 +17,14 @@
 //   POST /api/admin/shto          { phone, consent }      adds a mjeshtër (with their OK)
 //   POST /api/admin/fshi          { id, confirm: 'FSHIJE' }  deletes a mjeshtër's account
 //   POST /api/admin/vleresim      { id, reviewId, action: keep | hide | show, note? }  moderates a review
+// Ads (step 6):
+//   POST /api/admin/reklamat      {}                      advertisers, their campaigns and the last 30 days' counts
+//   POST /api/admin/reklamuesi    { id?, name, contact }  adds or changes an advertiser
+//   POST /api/admin/reklamuesi/fshi { id, confirm: 'FSHIJE' }  deletes one, with its campaigns and counts
+//   POST /api/admin/fushata       { id? | advertiserId, title, link, trades, towns, slots, startsOn, endsOn, active }
+//   POST /api/admin/fushata/foto?id=  (image/jpeg body)    sets the ad's image;  /fushata/foto/hiq { id } removes it
+//   POST /api/admin/fushata/fshi  { id }                  deletes a campaign and its counts
+//   GET  /api/admin/raporti       ?reklamuesi=&muaji=YYYY-MM  the month's report as a CSV download
 
 import {
   ADMIN, ADMIN_MESSAGES, LIST_FILTERS, adminCookie, adminMaintenance, createPro, currentAdmin, decide, endAdminSession,
@@ -26,6 +34,10 @@ import {
 import { crossSite, fail, json, notAllowed, readJpeg, readJson } from '../../server/http.js';
 import { PHOTO_MESSAGES, deletePhoto, savePhoto } from '../../server/photos.js';
 import { PROFILE_MESSAGES, deleteAccount, markEdited, saveProfile, validateProfile } from '../../server/profile.js';
+import {
+  AD_MESSAGES, deleteAdvertiser, deleteCampaign, listAds, loadCampaign, monthlyReport, removeCampaignImage, saveAdvertiser,
+  saveCampaign, saveCampaignImage, validId as validAdId, validateAdvertiser, validateCampaign,
+} from '../../server/ads.js';
 import { REVIEW_ACTIONS, decideReview } from '../../server/reviews.js';
 import { MESSAGES, normalisePhone, signinMaintenance } from '../../server/signin.js';
 import { smsConfigured } from '../../server/sms.js';
@@ -306,4 +318,100 @@ export const fshi = {
     return json(200, { ok: true, message: kept ? ADMIN_MESSAGES.deletedSuspended : ADMIN_MESSAGES.deleted, kept });
   }, { event: 'admin_delete_error' }),
   onRequest: notAllowed('POST'),
+};
+
+// ---------- ads (step 6) ----------
+
+const firstError = (errors) => errors[Object.keys(errors)[0]];
+const withAds = async (cfg, now, extra = {}, status = 200) => json(status, { ok: true, ...extra, ...(await listAds(cfg, now)) });
+
+export const reklamat = {
+  onRequestPost: team(({ cfg, now }) => withAds(cfg, now), { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const reklamuesi = {
+  onRequestPost: team(async ({ cfg, now, data }) => {
+    const { advertiser, errors } = validateAdvertiser(data);
+    if (Object.keys(errors).length) return fail(400, firstError(errors), { errors });
+    if (data.id !== undefined && data.id !== null && !validAdId(data.id)) return fail(404, AD_MESSAGES.advertiserNotFound);
+    const id = await saveAdvertiser(cfg, data.id || null, advertiser, now);
+    if (!id) return fail(404, AD_MESSAGES.advertiserNotFound);
+    log('admin_advertiser_saved');
+    return withAds(cfg, now, { message: AD_MESSAGES.advertiserSaved, id });
+  }, { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const reklamuesiFshi = {
+  onRequestPost: team(async ({ cfg, now, data }) => {
+    if (data.confirm !== 'FSHIJE') return fail(400, AD_MESSAGES.confirm, { field: 'confirm' });
+    if (!validAdId(data.id) || !(await deleteAdvertiser(cfg, data.id))) return fail(404, AD_MESSAGES.advertiserNotFound);
+    log('admin_advertiser_deleted');
+    return withAds(cfg, now, { message: AD_MESSAGES.advertiserDeleted });
+  }, { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const fushata = {
+  onRequestPost: team(async ({ cfg, now, data }) => {
+    const { campaign, errors } = validateCampaign(data);
+    if (Object.keys(errors).length) return fail(400, firstError(errors), { errors });
+    const editing = data.id !== undefined && data.id !== null;
+    if (editing && !validAdId(data.id)) return fail(404, AD_MESSAGES.campaignNotFound);
+    const id = await saveCampaign(cfg, editing ? data.id : null, data.advertiserId, campaign, now);
+    if (!id) return fail(404, editing ? AD_MESSAGES.campaignNotFound : AD_MESSAGES.advertiserNotFound);
+    log('admin_campaign_saved');
+    return withAds(cfg, now, { message: AD_MESSAGES.campaignSaved, campaign: await loadCampaign(cfg, id, now) });
+  }, { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const fushataFoto = {
+  onRequestPost: team(async ({ cfg, now, bytes, url }) => {
+    const id = url.searchParams.get('id');
+    if (!validAdId(id)) return fail(404, AD_MESSAGES.campaignNotFound);
+    const notReady = photosReady(cfg);
+    if (notReady) return notReady;
+    const out = await saveCampaignImage(cfg, id, bytes);
+    if (out.result === 'not_found') return fail(404, AD_MESSAGES.campaignNotFound);
+    if (out.result !== 'ok') return fail(400, AD_MESSAGES.imageInvalid);
+    return withAds(cfg, now, { message: AD_MESSAGES.imageSaved, campaign: await loadCampaign(cfg, id, now) });
+  }, { body: 'jpeg', event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const fushataFotoHiq = {
+  onRequestPost: team(async ({ cfg, now, data }) => {
+    if (!validAdId(data.id) || (await removeCampaignImage(cfg, data.id)).result !== 'ok') return fail(404, AD_MESSAGES.campaignNotFound);
+    return withAds(cfg, now, { message: AD_MESSAGES.imageRemoved, campaign: await loadCampaign(cfg, data.id, now) });
+  }, { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const fushataFshi = {
+  onRequestPost: team(async ({ cfg, now, data }) => {
+    if (!validAdId(data.id) || !(await deleteCampaign(cfg, data.id))) return fail(404, AD_MESSAGES.campaignNotFound);
+    log('admin_campaign_deleted');
+    return withAds(cfg, now, { message: AD_MESSAGES.campaignDeleted });
+  }, { event: 'admin_ads_error' }),
+  onRequest: notAllowed('POST'),
+};
+
+export const raporti = {
+  onRequestGet: team(async ({ cfg, url }) => {
+    const month = url.searchParams.get('muaji') || '';
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return fail(400, AD_MESSAGES.monthInvalid);
+    const report = await monthlyReport(cfg, url.searchParams.get('reklamuesi'), month);
+    if (!report) return fail(404, AD_MESSAGES.advertiserNotFound);
+    const slug = report.name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'reklamuesi';
+    return new Response(report.csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="rregullo-raporti-${slug}-${month}.csv"`,
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  }, { event: 'admin_report_error' }),
+  onRequest: notAllowed('GET'),
 };

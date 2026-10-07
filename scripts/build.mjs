@@ -117,6 +117,13 @@ privacy = common(privacy
   .replace('<!-- @sprite -->', sprite));
 writeFileSync(join(dist, 'privatesia.html'), privacy);
 
+// The terms of use (step 7).
+const terms = common(readFileSync(join(src, 'kushtet.html'), 'utf8')
+  .replace('<!-- @canonical-terms -->', siteUrl ? `<link rel="canonical" href="${esc(siteUrl)}/kushtet">` : '')
+  .replace('<!-- @contact-sentence -->', mail ? ` Për çdo pyetje na shkruaj në ${mail}.` : '')
+  .replace('<!-- @sprite -->', sprite));
+writeFileSync(join(dist, 'kushtet.html'), terms);
+
 let notFound = readFileSync(join(src, '404.html'), 'utf8');
 notFound = common(notFound).replace('<!-- @sprite -->', sprite);
 writeFileSync(join(dist, '404.html'), notFound);
@@ -183,14 +190,14 @@ if (adminPages.length) {
 
 // robots and sitemap need the real domain
 writeFileSync(join(dist, 'robots.txt'),
-  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\nDisallow: /admin/\nDisallow: /thirrjet\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
+  `User-agent: *\nAllow: /\nDisallow: /konfirmo\nDisallow: /cregjistrohu\nDisallow: /api/\nDisallow: /mjeshtri/\nDisallow: /admin/\nDisallow: /thirrjet\nDisallow: /r/\n${siteUrl ? `\nSitemap: ${siteUrl}/sitemap.xml\n` : ''}`);
 if (siteUrl) {
   writeFileSync(join(dist, 'sitemap.xml'),
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/mjeshter</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n</urlset>\n`);
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${esc(siteUrl)}/</loc></url>\n  <url><loc>${esc(siteUrl)}/mjeshter</loc></url>\n  <url><loc>${esc(siteUrl)}/privatesia</loc></url>\n  <url><loc>${esc(siteUrl)}/kushtet</loc></url>\n</urlset>\n`);
 }
 
 // Sanity checks: no template markers left, every local asset referenced exists
-for (const file of ['index.html', '404.html', 'privatesia.html', 'mjeshter.html', ...lojaPages, ...gamePages, ...callPages, ...proPages, ...adminPages]) {
+for (const file of ['index.html', '404.html', 'privatesia.html', 'kushtet.html', 'mjeshter.html', ...lojaPages, ...gamePages, ...callPages, ...proPages, ...adminPages]) {
   const html = readFileSync(join(dist, file), 'utf8');
   const left = html.match(/\{\{\w+\}\}|<!-- @[\w-]+/g);
   if (left) fail(`${file} still contains template markers: ${left.join(', ')}`);

@@ -24,6 +24,15 @@ export function yearsText(n) {
 
 const count = (n) => `${n} mjeshtër`;
 
+/** An ad (step 6), always marked Sponsorizuar. src/reklama.js counts the view once it is on screen. */
+export function adBlock(ad) {
+  if (!ad) return '';
+  return `<aside class="ad" data-ad="${esc(ad.id)}" data-ad-vendi="${esc(ad.slot)}" aria-label="Reklamë">
+  <p class="ad-label">Sponsorizuar · ${esc(ad.advertiser)}</p>
+  <a class="ad-link" href="${esc(ad.href)}" rel="sponsored noopener" target="_blank">${ad.image ? `<img class="ad-img" src="${esc(ad.image)}" alt="" loading="lazy" decoding="async">` : ''}<span class="ad-title">${esc(ad.title)}</span><span class="ad-cta">Shiko ofertën <span aria-hidden="true">↗</span></span></a>
+</aside>`;
+}
+
 // "★ 4,6 · 12 vlerësime", with the stars read out as words.
 const stars = (p, cls = 'dir-stars') => (p.reviews
   ? `<span class="${cls}"><span aria-hidden="true">★ </span><span class="visually-hidden">Vlerësimi </span>${esc(ratingText(p.rating))}<span class="visually-hidden"> nga 5</span> · ${esc(reviewsText(p.reviews))}</span>`
@@ -94,7 +103,7 @@ ${preview ? '<p class="dir-preview" role="note">Lista e mjeshtrave ende nuk ësh
 <main class="dir" id="main"${preview ? ' data-preview' : ''}>
 ${main}
 </main>
-<footer class="dir-foot"><p>Rregullo nuk merr pagesë nga klientët dhe nuk ndërhyn në marrëveshjen tënde me mjeshtrin. <a href="/privatesia">Privatësia</a></p></footer>
+<footer class="dir-foot"><p>Rregullo nuk merr pagesë nga klientët dhe nuk ndërhyn në marrëveshjen tënde me mjeshtrin. <a href="/privatesia">Privatësia</a> · <a href="/kushtet">Kushtet</a></p></footer>
 </body>
 </html>`.replace(/^\s*\n/gm, '');
   return new Response(html, {
@@ -170,7 +179,14 @@ function pager(s, r) {
 }
 
 /** The search page with its results. `s` is readSearch()'s answer, `r` search()'s. */
-export function searchPage(siteUrl, s, r, { preview = false } = {}) {
+// The ad goes after the third result, or last when there are fewer.
+function withAd(cards, ad) {
+  if (!ad) return cards;
+  const at = Math.min(3, cards.length);
+  return [...cards.slice(0, at), `<li class="dir-ad-item">${adBlock(ad)}</li>`, ...cards.slice(at)];
+}
+
+export function searchPage(siteUrl, s, r, { preview = false, ad = null } = {}) {
   const title = searchTitle(s.trade, s.town);
   const summary = r.total
     ? `${count(r.total)}${r.pages > 1 ? `, faqja ${r.page} nga ${r.pages}` : ''}`
@@ -181,7 +197,7 @@ export function searchPage(siteUrl, s, r, { preview = false } = {}) {
 </section>
 <section class="dir-results" aria-labelledby="dir-count">
   ${r.total ? `<p class="dir-count" id="dir-count" role="status">${esc(summary)}</p>
-  <ol class="dir-list">${r.results.map((p) => card(p, s.town)).join('\n')}</ol>
+  <ol class="dir-list">${withAd(r.results.map((p) => card(p, s.town)), ad).join('\n')}</ol>
   ${pager(s, r)}` : `<h2 class="visually-hidden" id="dir-count">Rezultatet</h2>${emptyResults(s.trade, s.town)}`}
 </section>`;
   const where = s.town ? ` në ${labelOf(TOWNS, s.town)}` : ' në Kosovë';
@@ -240,7 +256,7 @@ function reviewsSection(p) {
 }
 
 /** One mjeshtër's public profile. */
-export function profilePage(siteUrl, p, { preview = false } = {}) {
+export function profilePage(siteUrl, p, { preview = false, ad = null } = {}) {
   const facts = [
     `Punon në ${p.townLabels.join(', ')}`,
     yearsText(p.years),
@@ -267,7 +283,8 @@ export function profilePage(siteUrl, p, { preview = false } = {}) {
   ${p.about ? `<section class="dir-section" aria-labelledby="about-title"><h2 class="dir-h2" id="about-title">Rreth meje</h2><div class="dir-about">${paragraphs(p.about)}</div></section>` : ''}
   ${work}
   ${reviewsSection(p)}
-</article>`;
+</article>
+${adBlock(ad)}`;
   const trade = p.tradeLabels[0] || 'Mjeshtër';
   const town = p.townLabels[0] ? ` në ${p.townLabels[0]}` : '';
   const description = p.about

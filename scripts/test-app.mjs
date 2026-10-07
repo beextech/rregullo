@@ -1,5 +1,5 @@
 // End-to-end test of the mjeshtër sign-in (step 1), the dashboard (step 2), the team admin (step 3), the public directory (step 4)
-// and reviews (step 5) against the real
+// reviews (step 5) and ads (step 6) against the real
 // Worker, a local D1 database and a local R2 bucket, with scripts/mock-email.mjs standing in for Twilio (SMS), Resend
 // (email) and Cloudflare Turnstile. Nothing is sent or stored anywhere else.
 //   npm run test:app      (npm test runs it after the signup tests)
@@ -1889,8 +1889,157 @@ async function main() {
     });
 
 
+    // ---------- step 6: ads ----------
+    const adsApi = (path, body, c = ekipi1) => team(path, body, { cookie: c });
+    const plus = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+    const adsIn = (html) => [...html.matchAll(/<aside class="ad" data-ad="([^"]+)" data-ad-vendi="([^"]+)"/g)].map((m) => `${m[1]}|${m[2]}`);
+    const adUpload = (id, bytes, c = ekipi1) => request(`${BASE}/api/admin/fushata/foto?id=${encodeURIComponent(id)}`, {
+      method: 'POST', headers: { 'Content-Type': 'image/jpeg', Origin: BASE, Cookie: c }, body: bytes,
+    }).then(async (res) => ({ status: res.status, data: await res.json().catch(() => null) }));
+    let advId = '';
+    let campId = '';
+    let campB = '';
+    const CAMP = () => ({ advertiserId: advId, title: 'Bojë fasade -20% këtë muaj', link: 'https://bojera.example/oferta?x=1', slots: ['kerko', 'profili', 'loja', 'paneli'], trades: ['elektricist'], towns: ['gjilan'], startsOn: today(), endsOn: plus(30) });
+
+    console.log('Ads');
+    await check('92. the team adds an advertiser and campaigns; bad input is refused, and only the team gets in', async () => {
+      assert((await api('/api/admin/reklamat', {}, { cookie: drita })).status === 401, 'a mjeshtër');
+      assert((await api('/api/admin/reklamat', {})).status === 401, 'nobody');
+      const bad = await adsApi('reklamuesi', { name: ' ' });
+      assert(bad.status === 400 && bad.data.errors.name, JSON.stringify(bad.data));
+      const a = await adsApi('reklamuesi', { name: 'Bojëra & Co <b>', contact: 'Agim, 044 999 888' });
+      assert(a.status === 200 && a.data.advertisers.length === 1 && a.data.advertisers[0].contact === 'Agim, 044 999 888', JSON.stringify(a.data).slice(0, 200));
+      advId = a.data.id;
+      for (const [body, field] of [[{ title: '' }, 'title'], [{ title: 'x'.repeat(91) }, 'title'], [{ link: 'http://bojera.example' }, 'link'], [{ link: 'javascript:alert(1)' }, 'link'],
+        [{ link: 'https://user:pw@bojera.example' }, 'link'], [{ slots: [] }, 'slots'], [{ slots: ['ballina'] }, 'slots'], [{ endsOn: plus(-1) }, 'dates'], [{ startsOn: '2026-02-30' }, 'dates']]) {
+        const r = await adsApi('fushata', { ...CAMP(), ...body });
+        assert(r.status === 400 && r.data.errors[field], `${JSON.stringify(body)} → ${r.status} ${JSON.stringify(r.data.errors)}`);
+      }
+      assert((await adsApi('fushata', { ...CAMP(), advertiserId: '00000000-0000-0000-0000-000000000000' })).status === 404, 'unknown advertiser');
+      const c = await adsApi('fushata', { ...CAMP(), trades: ['elektricist', 'nope'], towns: ['gjilan', 'gjilan'] });
+      assert(c.status === 200 && c.data.campaign.state === 'live' && c.data.campaign.trades.join() === 'elektricist' && c.data.campaign.towns.join() === 'gjilan', JSON.stringify(c.data.campaign));
+      campId = c.data.campaign.id;
+      // A second one, for every trade and town but only in the games, starting tomorrow.
+      const later = await adsApi('fushata', { ...CAMP(), title: 'Vegla elektrike', trades: [], towns: [], slots: ['loja'], startsOn: plus(1), endsOn: plus(10) });
+      assert(later.status === 200 && later.data.campaign.state === 'scheduled', JSON.stringify(later.data.campaign));
+      campB = later.data.campaign.id;
+      assert(later.data.advertisers[0].campaigns.length === 2, 'the list');
+    });
+    await check('93. a campaign shows only on its trades and towns and between its dates, marked Sponsorizuar and escaped', async () => {
+      const s = await get(`${OPEN}/kerko?zanati=elektricist&komuna=gjilan`);
+      assert(adsIn(s.html).join() === `${campId}|kerko`, adsIn(s.html).join());
+      assert(s.html.includes('Sponsorizuar · Bojëra &amp; Co &lt;b&gt;') && s.html.includes(`href="/r/${campId}?v=kerko"`) && s.html.includes('rel="sponsored noopener"'), 'label or link');
+      assert(s.html.includes('<li class="dir-ad-item">') && !s.html.includes('044 999 888'), 'in the list, without the contact');
+      for (const q of ['?zanati=elektricist&komuna=kamenice', '?zanati=bojaxhi&komuna=viti', '?komuna=gjilan', '?zanati=elektricist', '?zanati=kulmi&komuna=junik']) {
+        assert(adsIn((await get(`${OPEN}/kerko${q}`)).html).length === 0, `${q} has an ad`);
+      }
+      assert(adsIn((await get(`${OPEN}${dritaPath}`)).html).join() === `${campId}|profili`, 'profile');
+      assert(adsIn((await get(`${OPEN}/m/rend-bekim-${H('b')}`)).html).length === 0, 'a bojaxhi profile');
+      // Pages drawn in the browser ask for theirs: the games have no trade, so only an untargeted ad fits, and that one starts tomorrow.
+      assert((await request(`${OPEN}/api/reklama?vendi=loja`)).status === 204, 'games');
+      const panel = await request(`${OPEN}/api/reklama?vendi=paneli&zanati=elektricist,murator&komuna=gjilan`);
+      const pd = await panel.json();
+      assert(panel.status === 200 && pd.ad.id === campId && pd.ad.href === `/r/${campId}?v=paneli` && pd.ad.advertiser === 'Bojëra & Co <b>' && pd.ad.image === null, JSON.stringify(pd));
+      assert((await request(`${OPEN}/api/reklama?vendi=paneli&zanati=murator&komuna=gjilan`)).status === 204, 'another trade');
+      assert((await request(`${OPEN}/api/reklama?vendi=kerko`)).status === 204, 'kerko from the API');
+      sql(`UPDATE campaigns SET starts_on = '${today()}' WHERE id = '${campB}'`);
+      const g = await (await request(`${OPEN}/api/reklama?vendi=loja`)).json();
+      assert(g.ad.id === campB && g.ad.title === 'Vegla elektrike', JSON.stringify(g));
+      sql(`UPDATE campaigns SET ends_on = '${plus(-1)}', starts_on = '${plus(-5)}' WHERE id = '${campB}'`);
+      assert((await request(`${OPEN}/api/reklama?vendi=loja`)).status === 204, 'an ended campaign');
+      const html = await (await request(`${BASE}/loja/`)).text();
+      assert(html.includes('data-ad-slot="loja"') && html.includes('src="/reklama.js"'), 'the games page has no slot');
+    });
+    await check('94. views and clicks are counted once per person per day, never for the team, and a click goes on to the advertiser', async () => {
+      const view = (body, { ip = freshIp(), cookie: c = '' } = {}) => request(`${OPEN}/api/reklama`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: OPEN, 'CF-Connecting-IP': ip, ...(c ? { Cookie: c } : {}) }, body: JSON.stringify(body),
+      }).then((r) => r.status);
+      const click = (path, { ip = freshIp(), cookie: c = '' } = {}) => request(`${OPEN}${path}`, { redirect: 'manual', headers: { 'CF-Connecting-IP': ip, ...(c ? { Cookie: c } : {}) } });
+      const [ip1, ip2] = [freshIp(), freshIp()];
+      for (const [b, ip] of [[{ id: campId, vendi: 'kerko' }, ip1], [{ id: campId, vendi: 'kerko' }, ip1], [{ id: campId, vendi: 'kerko' }, ip2], [{ id: campId, vendi: 'profili' }, ip1]]) {
+        assert(await view(b, { ip }) === 204, 'view');
+      }
+      for (const b of [{ id: campId, vendi: 'ballina' }, { id: 'nope', vendi: 'kerko' }, { id: campId }, { id: campB, vendi: 'loja' }]) assert(await view(b) === 204, `bad ${JSON.stringify(b)}`);
+      assert(await view({ id: campId, vendi: 'kerko' }, { cookie: ekipi1 }) === 204, 'team');
+      const r1 = await click(`/r/${campId}?v=kerko`, { ip: ip1 });
+      assert(r1.status === 302 && r1.headers.get('Location') === 'https://bojera.example/oferta?x=1' && r1.headers.get('Cache-Control') === 'no-store', `${r1.status} ${r1.headers.get('Location')}`);
+      await click(`/r/${campId}?v=kerko`, { ip: ip1 });
+      await click(`/r/${campId}?v=kerko`, { cookie: ekipi1 });
+      await click(`/r/${campId}?v=zzz`);
+      await click(`/r/${campId}`);
+      const unknown = await click('/r/00000000-0000-0000-0000-000000000000?v=kerko');
+      assert(unknown.status === 302 && unknown.headers.get('Location') === '/', `unknown → ${unknown.status} ${unknown.headers.get('Location')}`);
+      const rows = sql(`SELECT slot, views, clicks FROM ad_stats_daily WHERE campaign_id = '${campId}' ORDER BY slot`);
+      assert(JSON.stringify(rows) === JSON.stringify([{ slot: 'kerko', views: 2, clicks: 1 }, { slot: 'profili', views: 1, clicks: 0 }]), JSON.stringify(rows));
+      assert(sql(`SELECT COUNT(*) AS n FROM ad_stats_daily WHERE campaign_id = '${campB}'`)[0].n === 0, 'an ended campaign counted');
+      const c = (await adsApi('reklamat', {})).data.advertisers[0].campaigns.find((x) => x.id === campId);
+      assert(c.views30 === 3 && c.clicks30 === 1, JSON.stringify(c));
+    });
+    await check('95. the monthly report per advertiser matches the counts, as a CSV download for the team only', async () => {
+      const month = today().slice(0, 7);
+      const url = `/api/admin/raporti?reklamuesi=${advId}&muaji=${month}`;
+      const res = await request(`${BASE}${url}`, { headers: { Cookie: ekipi1 } });
+      const csv = await res.text();
+      assert(res.status === 200 && /text\/csv/.test(res.headers.get('Content-Type')) && /^attachment; filename="rregullo-raporti-bojera-co-b-\d{4}-\d{2}\.csv"$/.test(res.headers.get('Content-Disposition')), `${res.status} ${res.headers.get('Content-Disposition')}`);
+      const lines = csv.replace(/^﻿/, '').trim().split('\r\n');
+      assert(lines[0] === 'Reklama,Dita,Vendi,Shikime,Klikime', lines[0]);
+      assert(lines.includes(`Bojë fasade -20% këtë muaj,${today()},Kërkimi,2,1`) && lines.includes(`Bojë fasade -20% këtë muaj,${today()},Profilet,1,0`), csv);
+      assert(lines.includes(`Gjithsej: Bojë fasade -20% këtë muaj,${month},,3,1`), csv);
+      for (const [q, status] of [[`?reklamuesi=${advId}&muaji=2026-13`, 400], [`?reklamuesi=${advId}`, 400], [`?reklamuesi=00000000-0000-0000-0000-000000000000&muaji=${month}`, 404]]) {
+        assert((await request(`${BASE}/api/admin/raporti${q}`, { headers: { Cookie: ekipi1 } })).status === status, q);
+      }
+      assert((await request(`${BASE}${url}`, { headers: { Cookie: drita } })).status === 401, 'a mjeshtër');
+      assert((await request(`${BASE}${url}`)).status === 401, 'nobody');
+      // A title a spreadsheet would run as a formula is written as text.
+      sql(`UPDATE campaigns SET title = '=HYPERLINK("x")' WHERE id = '${campB}'`);
+      sql(`INSERT INTO ad_stats_daily (campaign_id, day, slot, views, clicks) VALUES ('${campB}', '${month}-01', 'loja', 4, 0)`);
+      const csv2 = await (await request(`${BASE}${url}`, { headers: { Cookie: ekipi1 } })).text();
+      assert(csv2.includes(`"'=HYPERLINK(""x"")",${month}-01,Lojërat,4,0`), csv2);
+    });
+    await check('96. a campaign can be changed, switched off, given an image and deleted with its counts; deleting the advertiser removes the rest', async () => {
+      const off = await adsApi('fushata', { ...CAMP(), id: campId, advertiserId: undefined, title: 'Bojë fasade -25%', link: 'https://bojera.example/', active: false });
+      assert(off.status === 200 && off.data.campaign.state === 'off' && off.data.campaign.title === 'Bojë fasade -25%', JSON.stringify(off.data).slice(0, 200));
+      assert(adsIn((await get(`${OPEN}/kerko?zanati=elektricist&komuna=gjilan`)).html).length === 0, 'shown while off');
+      const r = await request(`${OPEN}/r/${campId}?v=kerko`, { redirect: 'manual', headers: { 'CF-Connecting-IP': freshIp() } });
+      assert(r.status === 302 && r.headers.get('Location') === 'https://bojera.example/', 'an old link no longer leads on');
+      assert(sql(`SELECT SUM(clicks) AS n FROM ad_stats_daily WHERE campaign_id = '${campId}'`)[0].n === 1, 'a click on a switched-off ad counted');
+      const on = await adsApi('fushata', { ...CAMP(), id: campId, advertiserId: undefined, active: true });
+      assert(on.status === 200 && on.data.campaign.state === 'live', 'back on');
+      assert((await adsApi('fushata', { ...CAMP(), id: '00000000-0000-0000-0000-000000000000' })).status === 404, 'unknown campaign');
+      // The image
+      assert((await adUpload(campId, Buffer.from('not a jpeg'))).status === 400, 'not a JPEG');
+      const up = await adUpload(campId, JPEG);
+      assert(up.status === 200 && /^\/foto\/[0-9a-f-]{36}\.jpg$/.test(up.data.campaign.image), JSON.stringify(up.data).slice(0, 200));
+      const img = up.data.campaign.image;
+      assert((await request(`${BASE}${img}`)).status === 200, 'the image is not served');
+      const s = await get(`${OPEN}/kerko?zanati=elektricist&komuna=gjilan`);
+      assert(s.html.includes(`<img class="ad-img" src="${img}" alt=""`), 'the image in the ad');
+      const second = await adUpload(campId, JPEG);
+      assert(second.status === 200 && second.data.campaign.image !== img && (await request(`${BASE}${img}`)).status === 404, 'the old image stays');
+      const gone = await adsApi('fushata/foto/hiq', { id: campId });
+      assert(gone.status === 200 && gone.data.campaign.image === null && (await request(`${BASE}${second.data.campaign.image}`)).status === 404, 'image not removed');
+      // Deleting
+      assert((await adsApi('fushata/fshi', { id: campB })).status === 200, 'delete a campaign');
+      assert(sql(`SELECT COUNT(*) AS n FROM ad_stats_daily WHERE campaign_id = '${campB}'`)[0].n === 0, 'its counts stayed');
+      assert((await adsApi('fushata/fshi', { id: campB })).status === 404, 'deleted twice');
+      assert((await adsApi('reklamuesi/fshi', { id: advId, confirm: 'fshije' })).status === 400, 'without the word');
+      const del = await adsApi('reklamuesi/fshi', { id: advId, confirm: 'FSHIJE' });
+      assert(del.status === 200 && del.data.advertisers.length === 0, JSON.stringify(del.data).slice(0, 200));
+      assert(sql('SELECT COUNT(*) AS n FROM campaigns')[0].n === 0 && sql('SELECT COUNT(*) AS n FROM ad_stats_daily')[0].n === 0, 'left behind');
+    });
+    await check('97. the terms of use and the privacy notice cover reviews and ads; every page links them', async () => {
+      const terms = await request(`${BASE}/kushtet`);
+      const html = await terms.text();
+      assert(terms.status === 200 && html.includes('<h1>Kushtet e përdorimit</h1>') && html.includes('id="reklamat"') && !/\{\{\w+\}\}|<!-- @/.test(html), `status ${terms.status}`);
+      const privacy = await (await request(`${BASE}/privatesia`)).text();
+      assert(privacy.includes('id="vleresimet"') && privacy.includes('id="reklamat"'), 'privacy sections');
+      assert((await get(`${OPEN}/kerko`)).html.includes('<a href="/kushtet">Kushtet</a>'), 'the directory footer');
+      const robots = await (await request(`${BASE}/robots.txt`)).text();
+      assert(robots.includes('Disallow: /r/'), 'robots.txt');
+    });
+
     // Rebuilding dist/ under the running servers breaks their static files, so this comes last of the HTTP checks.
-    await check('92. the build: DIRECTORY_OPEN=1 swaps the homepage signup for the search box; without it the signup stays', async () => {
+    await check('98. the build: DIRECTORY_OPEN=1 swaps the homepage signup for the search box; without it the signup stays', async () => {
       const index = () => readFileSync(join(root, 'dist', 'index.html'), 'utf8');
       const build = (env) => execFileSync('node', ['scripts/build.mjs'], { cwd: root, stdio: 'ignore', env });
       let open = '';
@@ -1909,7 +2058,7 @@ async function main() {
 
 
     console.log('Logs');
-    await check('93. logs contain no addresses, phone numbers, tokens or codes', async () => {
+    await check('99. logs contain no addresses, phone numbers, tokens or codes', async () => {
       // Photo ids and pro ids are random UUIDs, and their digits can look like a number or a code by chance: leave them out.
       const scanned = (devLog.slice(logStart) + openLog.slice(openLogStart)).replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
       const at = (i) => JSON.stringify(scanned.slice(Math.max(0, i - 80), i + 40));

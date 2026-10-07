@@ -3,6 +3,8 @@
 // where "Si shkoi?" lets the client review a mjeshtër 12 hours to 60 days after the tap (POST /api/vleresim).
 // The pages work without it: the links still call and open WhatsApp and Viber.
 
+import '/reklama.js';
+
 const KEY = 'rr_thirrjet';
 const TOWN_KEY = 'rr_komuna';
 const MAX = 30;

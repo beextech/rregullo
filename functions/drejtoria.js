@@ -6,6 +6,7 @@
 //   GET  /sitemap.xml                    the static sitemap, plus /kerko and every approved profile once the directory is open
 // Until DIRECTORY_OPEN is "1" the pages show "coming soon" to everyone but the signed-in team, and nothing is counted.
 
+import { pickAd } from '../server/ads.js';
 import { currentAdmin, readAdminConfig } from '../server/admin.js';
 import {
   countTap, directoryOpen, receiptFor, handleFromSlug, loadPublicProfile, readSearch, search, sitemapEntries,
@@ -60,7 +61,8 @@ export const kerko = {
       if (a.response) return a.response;
       const s = readSearch(new URL(request.url));
       const r = await search(a.cfg, s, now);
-      return searchPage(a.cfg.siteUrl, s, r, { preview: a.preview });
+      const ad = r.total ? await pickAd(a.cfg, 'kerko', { trades: [s.trade], towns: [s.town] }, now).catch(() => null) : null;
+      return searchPage(a.cfg.siteUrl, s, r, { preview: a.preview, ad });
     } catch (e) {
       log('directory_error', { reason: e.message });
       return unavailable();
@@ -81,7 +83,8 @@ export const profili = {
       if (`/m/${params.slug}` !== p.path) {
         return new Response(null, { status: 301, headers: { Location: p.path, 'Cache-Control': 'no-cache' } });
       }
-      return profilePage(a.cfg.siteUrl, p, { preview: a.preview });
+      const ad = await pickAd(a.cfg, 'profili', { trades: p.trades, towns: p.towns }, now).catch(() => null);
+      return profilePage(a.cfg.siteUrl, p, { preview: a.preview, ad });
     } catch (e) {
       log('directory_error', { reason: e.message });
       return unavailable();

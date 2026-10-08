@@ -65,7 +65,7 @@ One row per address in `subscribers` (`migrations/0001_subscribers.sql`). Names,
 
 **Database and secrets**
 - **Queries:** every query is a prepared statement with bound parameters.
-- **Access:** the database is reachable only through the Functions' `DB` binding. There's no public export or admin endpoint.
+- **Access:** the database is reachable only through the Functions' `DB` binding. There's no public export endpoint, and the team admin ([/admin](#team-admin-admin)) never reads or exports the launch list.
 - **Secrets:** they live only in Cloudflare's encrypted secrets and in a git-ignored `.dev.vars` locally. None are in the repo.
 
 **Links and tokens**
@@ -116,6 +116,8 @@ To deploy from your computer by hand: `npx wrangler login`, then steps 2 and 4 b
    - **Build command:** `npm run build`
    - **Deploy command:** `npx wrangler deploy`
    - **Build variable:** `NODE_VERSION` = `20`
+
+   Builds of other branches (pull requests) run `npx wrangler preview`. The `[previews]` block in `wrangler.toml` gives those previews no database, variables or secrets, so a preview can never touch the real list; signup and sign-in answer with an error there. Previews also get no public URL while `preview_urls = false`.
 
 The domain is connected through `routes` in `wrangler.toml`: `rregullo.net` and `www.rregullo.net` are Worker custom domains, so each deploy creates their DNS records and HTTPS certificates. The DNS zone is on Cloudflare (nameservers set at Namecheap). If a deploy fails with *"Hostname … already has externally managed DNS records"*, delete the A, AAAA and CNAME records for `@` and `www` under **rregullo.net > DNS > Records** (keep the MX and TXT email-forwarding records) and deploy again. `SITE_URL` is `https://rregullo.net`; note that `npm run deploy:auto` rewrites it to the workers.dev address.
 
@@ -295,6 +297,190 @@ Shared sound effects (opt-in) live in `src/loja/sfx/`. The homepage teasers belo
 
 To add a game: create `src/loja/<slug>/index.html` (copy the head, header and sprite from an existing game), add one `<li class="game">` card to `src/loja/index.html`, and optionally a teaser row on the homepage. The build picks up every `index.html` under `src/loja/` for the stylesheet hash and the missing-file checks.
 
+## Mjeshtër panel (/mjeshtri)
+
+Steps 1 and 2 of the app ([implementation guide](https://claude.ai/code/artifact/51fbc9e3-0603-434c-9676-6f7f0b561ffa)). Mjeshtër sign in with their Kosovo mobile number and a 6-digit code sent by SMS; there is no password, and clients never sign in. Once signed in, a mjeshtër fills in a profile, adds photos and sends it for approval.
+
+The page (`src/mjeshtri/`) has four tabs:
+- **Ballina:** the profile's state (not sent, being checked, live, needs changes, suspended), the "Marr punë tani" switch, the checklist with "Dërgo për shqyrtim", and the last 30 days' calls, WhatsApp and Viber taps, profile views and reviews. Views and taps come from the [public directory](#public-directory-kerko-and-m) (step 4); reviews stay at zero until step 5. Once approved, and once the directory is open, Ballina also shows the profile's public address.
+- **Profili:** name, up to 5 trades, up to 10 of the 38 municipalities, a few sentences about the work, years of experience, an optional price note and WhatsApp/Viber on or off, with a preview of what clients will see.
+- **Foto:** a profile photo and up to 12 work photos, in the order chosen. The phone shrinks each photo before it is sent (profile 800×800, work photos at most 1600 px), which also removes its location data.
+- **Llogaria:** the number, signing out (here or on every phone) and deleting the account.
+
+| Path | What it is |
+|---|---|
+| `POST /api/mjeshtri/kodi` | `{ phone, turnstile }`: checks the bot test, then sends a code by SMS |
+| `POST /api/mjeshtri/hyr` | `{ phone, code }`: checks the code and sets the `rr_mjeshtri` cookie (HttpOnly, Secure, SameSite=Lax, 90 days) |
+| `GET /api/mjeshtri/une` | Everything the dashboard shows, or 401 |
+| `POST /api/mjeshtri/dil` | `{ all? }`: signs out, on every phone with `all: true` |
+| `POST /api/mjeshtri/profili` | Saves the profile; invalid fields come back by name and nothing is saved |
+| `POST /api/mjeshtri/disponueshem` | `{ available }`: the "Marr punë tani" switch |
+| `POST /api/mjeshtri/dergo` | Sends the profile for approval (needs name, a trade, a municipality and a profile photo) |
+| `POST /api/mjeshtri/foto?lloji=profili\|pune` | The JPEG itself as the body (at most 2 MB, 200–2048 px); a new profile photo replaces the old one |
+| `POST /api/mjeshtri/foto/fshi` | `{ id }`: deletes a photo |
+| `POST /api/mjeshtri/foto/renditja` | `{ ids }`: the order of the work photos |
+| `POST /api/mjeshtri/fshi` | `{ confirm: 'FSHIJE' }`: deletes the account, its photos, counts and sessions |
+| `GET /foto/<id>.jpg` | A photo, straight from storage (R2, or KV until R2 is on), cached for a year (a changed photo always gets a new id) |
+
+Every POST must come from this site, as JSON (or `image/jpeg` for photos), which a page elsewhere can't send without a CORS preflight that the API never answers.
+
+Tables:
+- `migrations/0002_mjeshtrit.sql`: `pros` (one row per mjeshtër, created as `draft` at first sign-in), `sms_codes` (the current code's keyed hash and the send counters) and `sessions` (SHA-256 of each cookie token).
+- `migrations/0003_paneli.sql`: `pro_photos` (one row per photo; the image is in R2, or KV until R2 is on, as `foto/<id>.jpg`) and `pro_stats_daily` (counts per mjeshtër per day). Both are deleted with the mjeshtër. Never rebuild the `pros` table (only `ALTER TABLE … ADD COLUMN`): rebuilding it would delete these rows through the cascade.
+
+Trades and municipalities are in `src/mjeshtri/catalog.js`.
+
+**Profile states.** A new account is `draft`. "Dërgo për shqyrtim" makes it `pending`; the team then sets `approved`, `rejected` (with a note in `status_note`, shown on Ballina) or `suspended` from the [team admin](#team-admin-admin) (step 3). A mjeshtër can keep editing while pending or approved. A suspended one can still look, sign out and delete the account, but not edit, upload, send or switch availability. Only if `/admin` can't be used (for example before `ADMIN_EMAILS` is set), approve from the Cloudflare dashboard (**D1 > rregullo-launch > Console**): `UPDATE pros SET status = 'approved', approved_at = unixepoch() * 1000, updated_at = unixepoch() * 1000, handle = COALESCE(handle, lower(hex(randomblob(5)))) WHERE phone = '+38344…';` (the `handle` gives the profile its public address; without one it isn't listed) To ask for changes instead: `SET status = 'rejected', status_note = 'Shto një foto ku të shihet fytyra.'`. Changes made this way send no SMS and leave no history row.
+
+**Keeping SMS cheap and safe**
+- Cloudflare Turnstile must pass before any SMS goes out, and only `+383 43–49` mobile numbers get one.
+- One code per number per minute, 5 per number per 24 hours, 10 per network per hour and 20 per day.
+- A code lives 10 minutes, is single-use and is thrown away after 5 wrong guesses. Only an HMAC of it is stored.
+- The answer is the same whether or not a number already has an account. Logs carry event names only, never numbers or codes.
+- A failed send isn't counted and leaves no usable code. Outside local development, the Worker refuses to send codes until the SMS and Turnstile secrets are set.
+
+**Photos.** At most 60 uploads a day per mjeshtër. The server checks that each upload really is a JPEG of a sensible size, and stops reading any body that passes 2 MB. Photos are served with their own locked-down headers (`Content-Security-Policy: sandbox`, `nosniff`, same-site only). R2's free tier covers 10 GB, roughly 40,000 photos at these sizes.
+
+**Privacy.** The "Paneli i mjeshtrit" part of the privacy notice (`/privatesia#mjeshtrit`, linked from the sign-in screen and from Llogaria) lists what the panel stores, how long, and who processes it (Cloudflare, Twilio). If you change `SIGNIN` in `server/signin.js`, the photo rules or the tables, change the notice too.
+
+**Setup before it goes live**
+1. **Photo storage:** until R2 is enabled, photos are kept in Workers KV (binding `PHOTOS_KV`, `server/photo-store.js`), which needs no card; the first deploy creates the namespace by itself. KV's free tier allows 1,000 uploads a day and 1 GB (about 4,000 photos). Later, enable **R2 Object Storage** in the Cloudflare dashboard (free up to 10 GB, but it asks for a card) and uncomment the `[[r2_buckets]]` block in `wrangler.toml`: new photos then go to R2, and the ones already in KV keep working.
+2. **Database tables:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0002` and `0003`. They only add tables, so the live site is unaffected.
+3. **Turnstile:** Cloudflare dashboard > Turnstile > Add widget for `rregullo.net` (managed mode). Put the **site key** in `site.config.json` as `turnstileSiteKey` (it's public) and the **secret key** in the Worker: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
+4. **SMS (Twilio):** create the account, and check the price per SMS to Kosovo (+383) against a local gateway first. Register `Rregullo` as an alphanumeric sender ID (or buy a number, or use a Messaging Service). Then set `npx wrangler secret put TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`, and set `SMS_FROM` in `wrangler.toml` if it isn't `Rregullo`. To use another provider, replace `sendSms()` in `server/sms.js`; nothing else depends on Twilio.
+5. Deploy.
+
+Pull-request previews have no database or photo storage, so the panel answers with an error there.
+
+**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`); photos are kept in a local KV under `.wrangler/state`. `npm run test:app` runs the sign-in and dashboard checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks. They cover sessions, every endpoint's same-site and method checks, saving and validating the profile, uploads (wrong types, sizes, the 12-photo and 60-a-day limits, replacing and deleting from R2), photo caching headers, approval states, the availability switch, the 30-day counts, suspension, signing out everywhere and deleting an account. The screens were also walked through in headless Chromium at 360 px, 390 px and 1280 px.
+
+## Team admin (/admin)
+
+Step 3 of the app. The Rregullo team signs in at `/admin/` with an email address from `ADMIN_EMAILS` and takes a mjeshtër from sign-up to approved. The page (`src/admin/`) reuses the panel's styles, catalog and photo shrinking.
+
+The team can:
+- **See the queue:** filters with counts (Në pritje, Aprovuar, Kthyer për ndryshime, Pezulluar, Pa dërguar, Ndryshuar pas aprovimit, Të gjithë) and a search by name or phone number. Pending profiles come oldest first.
+- **Review a profile:** everything the mjeshtër filled in, the photos, the checklist, the phone number as a `tel:` link and the history. An approved profile links to its public page, which the team can open even before the directory opens.
+- **Decide:** approve, send back for changes with a reason the mjeshtër sees on Ballina, suspend, lift a suspension, and set or remove the "Verifikuar" badge (shown to clients in the directory). Each reason can carry a team-only note.
+- **Edit for them:** save the profile and upload or delete photos with the same rules and limits as the panel.
+- **Add a mjeshtër** who can't do it on a phone, only with their consent (the form asks for it). The account starts as `draft`; the mjeshtër can later sign in with that number by SMS and find the profile.
+- **Delete** an account, with the same typed confirmation as Llogaria.
+
+| Path | What it is |
+|---|---|
+| `POST /api/admin/lidhja` | `{ email }`: emails a sign-in link and code if the address is allowed (same answer either way) |
+| `POST /api/admin/hyr` | `{ token }` from the link, or `{ email, code }`: signs in and sets the `rr_ekipi` cookie (HttpOnly, Secure, SameSite=Strict, 7 days) |
+| `GET /api/admin/une` | The signed-in address and whether SMS and photos are set up, or 401 |
+| `POST /api/admin/dil` | Signs out |
+| `POST /api/admin/mjeshtrit` | `{ status, q }`: the list (at most 200) and the count for each filter. A POST, so a searched name or number never lands in a URL or the request logs |
+| `GET /api/admin/mjeshtri` | `?id=`: one mjeshtër in full, with the history |
+| `POST /api/admin/vendim` | `{ id, action, note?, internalNote?, notify?, seenEditedAt? }`: a decision (below) |
+| `POST /api/admin/profili` | `{ id, …profile }`: saves the profile for them; invalid fields come back by name |
+| `POST /api/admin/foto?id=…&lloji=profili\|pune` | Uploads a JPEG for them (same checks as the panel) |
+| `POST /api/admin/foto/fshi` | `{ id, photoId }`: deletes a photo |
+| `POST /api/admin/shto` | `{ phone, consent: true }`: adds a mjeshtër; 409 with the existing `id` if the number is already there |
+| `POST /api/admin/fshi` | `{ id, confirm: 'FSHIJE' }`: deletes the account |
+
+The same rules as the panel's API apply: every POST must come from this site as JSON (or `image/jpeg`), every answer is `no-store`, and logs carry event names only. A mjeshtër's cookie never opens the admin API and the team's cookie never opens the mjeshtër API. `/admin/` is `noindex` and disallowed in `robots.txt`.
+
+Tables (`migrations/0004_ekipi.sql`):
+- `admin_links`: one row per emailed sign-in link: the SHA-256 of the link's token, a keyed hash of its code, the address, wrong-code attempts and times. Deleted a day after it was made.
+- `admin_log`: the history, one row per change: when, which team address, what (`created`, `profile`, `photo`, `approve`, `reject`, `suspend`, `unsuspend`, `verify`, `unverify`, `seen`, `deleted`), the reason the mjeshtër saw (`public_note`) and the team-only note (`note`). It goes with the mjeshtër's row; a suspended account that is deleted keeps its bare row and its history.
+- `pros.edited_at`: when the profile or its photos last changed (the "Marr punë tani" switch doesn't count).
+- Team sessions use the existing `sessions` table with `kind = 'admin'`.
+
+**Signing in.** The team member types their address and gets an email with a link and a 6-digit code; either one works, once, for 15 minutes. The code is for when the link opens in another browser (mail apps often have their own). The link carries its token after `#`, so it never reaches a server log, and the page asks for a click before using it, so link scanners can't spend it. The answer is the same for any well-formed address, whether or not it is allowed; only the per-network limit answers differently. A session lasts 7 days, and every request checks the address is still in `ADMIN_EMAILS`, so removing an address locks it out at once.
+- At most 3 links per address per 15 minutes, 5 requests per network per 10 minutes and 20 per day.
+- A link's code stops working after 5 wrong tries, and wrong tries per address are also capped per day.
+
+**States and decisions** (the status column is the one from [Profile states](#mjeshtër-panel-mjeshtri)):
+
+| Action | From | Result |
+|---|---|---|
+| Aprovo (`approve`) | `draft`, `pending`, `rejected` | `approved`, note cleared. Needs the checklist: a name, a trade, a municipality and a profile photo; otherwise 400 with what's `missing`. |
+| Kthe për ndryshime (`reject`) | `pending`, `approved` | `rejected`, with a reason of 3–300 characters that the mjeshtër sees |
+| Pezullo (`suspend`) | any but `suspended` | `suspended`, with a reason. Their sessions stay, so they can still look, sign out and delete. |
+| Hiq pezullimin (`unsuspend`) | `suspended` | `pending` (sent again now) if the checklist is complete, otherwise `draft`; note cleared |
+| Shënoje si të kontrolluar (`seen`) | `approved` | stays `approved`; marks the current version as checked |
+| Verifikuar on/off (`verify`, `unverify`) | any | the badge |
+
+A mjeshtër can keep editing an approved profile; it then shows as "Ndryshuar" until the team approves it again or marks it as checked. Approving (or `seen`) only goes through if the profile hasn't changed since the team opened it, and Aprovo waits while the team's own edits are unsaved. Every change is conditional on the status in the database, so two team members acting at once get a 409 with the fresh profile instead of an impossible transition. Each change is written to `admin_log`.
+
+**SMS to the mjeshtër.** On approve and on reject, when SMS is set up and "Njoftoje me SMS" is ticked (it is by default), the mjeshtër gets a short text (plain ASCII, one SMS) with a link to `/mjeshtri`. At most 3 such texts per mjeshtër and 50 in all per 24 hours, counted before sending, so a failed send still counts. The decision always goes through; the answer says whether the SMS was `sent`, `failed`, `off`, `skipped` or `capped`.
+
+**Email to the team.** When a mjeshtër sends a profile for approval, every `ADMIN_EMAILS` address gets *Një profil i ri pret shqyrtim* with a link to the queue, at most once an hour. It carries no name, number or id. It's skipped when `ADMIN_EMAILS` or email isn't set up.
+
+**Setup before it goes live**
+1. **Database:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0004`. It only adds tables and a column.
+2. **Who may enter:** `npx wrangler secret put ADMIN_EMAILS`, with the team's addresses separated by commas (for example `ana@rregullo.net, besi@rregullo.net`). It's a secret so the addresses never appear in the public repo. Empty or missing: nobody can enter. To remove someone, set it again without their address; it takes effect at once, without a redeploy.
+3. **Email:** the links go through Resend like the launch emails (`RESEND_API_KEY`, `EMAIL_FROM`). While `EMAIL_FROM` is Resend's test sender (`onboarding@resend.dev`), Resend only delivers to the Resend account's own address, so other team members get nothing. Verify `rregullo.net` in Resend first ([Setup step 3](#3-email-resend)) and set `EMAIL_FROM` to an address on it.
+4. Deploy, open `/admin/`, sign in, and approve a test mjeshtër end to end.
+
+**Locally,** `npm run dev` with `ADMIN_EMAILS` and `EMAIL_API_BASE` in `.dev.vars` sends the links to the mock (`scripts/mock-email.mjs`; read them at `/_messages`). `npm run test:app` also covers the team admin: the same answer for allowed and unknown addresses, the limits, single-use and expiring links and codes, lockout after an address is removed, cookie flags, cross-site posts, the separation of the two cookies, the list, every allowed and refused transition, the SMS rules and caps, adding a mjeshtër who then signs in by SMS, team edits and photos, deleting, the history and logs without addresses, numbers, tokens or codes.
+
+## Public directory (/kerko and /m/)
+
+Step 4 of the app. Clients pick a trade and a municipality, see the approved mjeshtër and call them, with no account. Everything is rendered by the Worker, so pages are fast on any phone and readable by Google; `src/kerko/kerko.js` only adds counting and "Thirrjet e mia" on top, and the links work without it.
+
+| Path | What it is |
+|---|---|
+| `GET /kerko?zanati=&komuna=&faqja=` | Search results, 20 per page. Either filter may be empty (all trades, all of Kosovo); unknown values are ignored. |
+| `GET /m/<name>-<handle>` | One mjeshtër: photo, name, Verifikuar, trades, municipalities, years, price note, about, work photos, Thirre / WhatsApp / Viber, the number. A stale or differently written name part redirects (301) to the current address. |
+| `POST /api/numero` | `{ m: handle, lloji: 'shikim' \| 'thirrje' \| 'whatsapp' \| 'viber' }`: counts a view or a tap. 204, except a tap on an approved profile, which answers 200 with `{ receipt }` for reviews (step 5). |
+| `GET /thirrjet` | "Thirrjet e mia": the mjeshtër this browser called or messaged, from `localStorage` only. |
+| `GET /sitemap.xml` | The static sitemap, plus `/kerko` and every approved profile once the directory is open. |
+
+**Opening it.** `DIRECTORY_OPEN` in `wrangler.toml` is `"0"`: `/kerko` and `/m/…` show "coming soon" to the public, the homepage keeps the launch signup, and nothing is counted. A team member signed in at `/admin` already sees the real pages, marked as a preview and `noindex`. Setting it to `"1"` and deploying opens the pages, puts the search box in the homepage's signup place (the build reads the same line), adds the profiles to the sitemap and shows mjeshtër their public address on Ballina. Open it once there are approved mjeshtër in the main trades and towns.
+
+**Who is listed.** Only `approved` profiles. A rejected, suspended or deleted one disappears at once (404). The address `/m/<name>-<handle>` uses `pros.handle` (`migrations/0005_drejtoria.sql`), a random id given at the first approval that never changes, so shared links survive a change of name.
+
+**Ranking.** Available now ("Marr punë tani") first, then the rating (the average of visible reviews, pulled toward 4 stars until a mjeshtër has a few, so one 5-star review doesn't beat twenty 4.8s), then the number of reviews, then the more complete profile (the dashboard's checklist), then Verifikuar, then a rotation that changes daily so that equals take turns at the top.
+
+**Counting.** A profile view and each tap on Thirre, WhatsApp or Viber add to `pro_stats_daily`, which the mjeshtër sees on Ballina. Each is counted at most once per profile, kind and network address per day, and at most 300 counts per address per day, through keyed hashes in `rate_events` that are deleted after a day. The team and the mjeshtër looking at their own profile aren't counted. No cookie is set and nothing about the client is stored.
+
+**Thirrjet e mia.** Each tap also saves the mjeshtër (name, trades, number, profile address, when, which button) in the browser's `localStorage` under `rr_thirrjet`, at most 30, newest first; the homepage remembers the last municipality searched (`rr_komuna`). Step 5 adds the tap's receipt and "Si shkoi?" there (see Reviews).
+
+**Privacy.** The "Kërkimi i mjeshtrave" part of the privacy notice (`/privatesia#klientet`) describes the counting and Thirrjet e mia, and "Paneli i mjeshtrit" says the profile page is public and indexable.
+
+**Setup before it goes live**
+1. **Database:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0005`. It adds one column and an index.
+2. Approve a few mjeshtër, check their pages from `/admin` (the "Shiko profilin publik" link), then set `DIRECTORY_OPEN = "1"` and deploy.
+
+**Locally,** add `--var DIRECTORY_OPEN:1` to `wrangler dev`, or build with `DIRECTORY_OPEN=1 npm run build` to see the homepage search box. `npm run test:app` covers the directory: the closed and preview states, search filters, ranking and paging, profile pages and redirects, escaping, counting and its limits, the sitemap and the homepage switch.
+
+## Reviews (step 5)
+
+Only a client who tapped Thirre, WhatsApp or Viber can review, and every review is confirmed by email.
+
+1. **The receipt.** A tap on an approved profile answers with a signed receipt, `handle.time.random.signature` (HMAC with `APP_SECRET`). The browser keeps it in its Thirrjet e mia entry. Nothing about the client is in it.
+2. **"Si shkoi?"** From 12 hours to 60 days after the tap, `/thirrjet` shows a form: 1–5 stars, an optional comment (600) and display name (40), and an email. `POST /api/vleresim` checks the receipt and the limits (5 an hour and 20 a day per network address, 5 a day per email), stores the review as `unconfirmed` and emails a link.
+3. **The link,** `/vleresimi?t=…`, opens a page that publishes the review with one tap (link scanners only GET, so they publish nothing). The same link later deletes it. Confirming clears the stored email, keeps only `hmac('review-email', address)`, and replaces any earlier review from that address for that mjeshtër. One receipt gives one review. Unconfirmed reviews are deleted after 48 hours.
+4. **Shown** on the profile (stars, comment, name or "Klient", month and year, the mjeshtër's reply), as stars and a count on search cards, in the ranking, and as `aggregateRating` in the profile's JSON-LD. The mjeshtër's Ballina shows the average, the new reviews of the last 30 days and the list.
+5. **The mjeshtër** can reply once, publicly (`POST /api/mjeshtri/pergjigju`), or report a review with a reason (`POST /api/mjeshtri/raporto`). A report puts it in the team's "Vlerësime të raportuara" list and in the hourly queue email.
+6. **The team** keeps or hides a reported review, and can hide or show any review, from the mjeshtër's page in `/admin` (`POST /api/admin/vleresim`). Each decision goes into the history.
+
+Table: `reviews` (`migrations/0006_vleresimet.sql`), deleted with the mjeshtër. The migration also rebuilds `admin_log` to allow the three review actions; its rows are copied over unchanged.
+
+**Setup:** `npm run db:migrate` applies `0006`. Reviews need the directory open and Resend working: until `rregullo.net` is verified in Resend, only the Resend account's own address receives the links.
+
+## Ads (step 6)
+
+Companies that sell repair products can advertise. Every ad is marked "Sponsorizuar · <company>", there's no payment in the platform, and no ad network or tracking script: views and clicks are counted on our own server.
+
+1. **The team** adds advertisers and their campaigns in `/admin` → Reklamat: a title, an `https://` link, an optional image (or a text card without one), the slots, the trades and towns (empty means all), start and end dates, and on/off.
+2. **Slots:** `kerko` (search results, after the 3rd result), `profili` (under a profile), `loja` (the games page) and `paneli` (an offer on the mjeshtër's Ballina, matched to their trades and towns). Search and profile ads are in the page itself; the other two come from `GET /api/reklama?vendi=&zanati=&komuna=` (204 when nothing fits). When several campaigns fit, one is picked at random.
+3. **Counting:** a view is counted when half the ad is on screen (`POST /api/reklama`), a click at `/r/<id>?v=<slot>`, which then sends the visitor to the link. Each counts once a day per campaign, slot and network address (stored as a keyed hash, like the rest of the site), at most 300 a day per address, only while the campaign is live, and never for the team. Days are UTC.
+4. **Report:** each advertiser's card has "Shkarko raportin (CSV)" for a month: a row per campaign, day and slot, plus totals (`GET /api/admin/raporti?reklamuesi=<id>&muaji=YYYY-MM`).
+
+Tables: `advertisers`, `campaigns`, `ad_stats_daily` (`migrations/0007_reklamat.sql`). Deleting an advertiser deletes its campaigns, images and counts.
+
+**Setup:** `npm run db:migrate` applies `0007`. Images use the same photo storage as the panel.
+
+## Launch (step 7)
+
+- **Terms of use** are at `/kushtet` (`src/kushtet.html`), linked from every footer. The privacy notice now also covers reviews and ads.
+- **Checklist, in order:** apply migrations `0002`–`0007` → set the secrets and settings → verify `rregullo.net` in Resend → sign up the first mjeshtër town by town from `/admin` → native speaker and legal review → `DIRECTORY_OPEN = "1"` and deploy → check the live site → send the launch email (see "Launch day"), only when the owner says so.
+
 ## Before launch, please also
 
 - **Native speaker check:** have someone from Kosovo read all the new copy:
@@ -304,3 +490,11 @@ To add a game: create `src/loja/<slug>/index.html` (copy the head, header and sp
   - the launch email, which I wrote and which wasn't in the brief
 - **Legal review:** have the privacy notice reviewed. It describes this implementation accurately, but it doesn't claim compliance with any specific law, and it mentions Kosovo's Agency for Information and Privacy only as the place to complain.
 - **Contact email:** set `CONTACT_EMAIL`.
+- **Native speaker check for `/mjeshtri`:** the sign-in page, the four dashboard tabs, their error messages, the SMS text and the new "Paneli i mjeshtrit" part of the privacy notice.
+- **Native speaker check for `/admin`:** the team screens, the sign-in email, the "new profile" email, the approve and reject SMS texts, and the privacy notice's new and changed parts ("Paneli i mjeshtrit", "Ekipi i Rregullo", cookies).
+- **Native speaker check for the directory:** `/kerko`, the profile pages, `/thirrjet`, the homepage search box and the privacy notice's "Kërkimi i mjeshtrave" part.
+- **Native speaker check for reviews:** "Si shkoi?" on `/thirrjet`, the confirmation email and pages, the reviews on profiles, Ballina and `/admin`, and the privacy notice's "Vlerësimet" part.
+- **Native speaker check for ads and terms:** `/kushtet`, the "Sponsorizuar" cards, the Reklamat screens in `/admin` and the privacy notice's "Reklamat" part.
+- **Legal review of the terms** (`/kushtet`) together with the privacy notice.
+- **Open the directory** (`DIRECTORY_OPEN = "1"`) before sending the launch email, which says Rregullo is available.
+- **Team access:** set `ADMIN_EMAILS`, verify `rregullo.net` in Resend and move `EMAIL_FROM` off the test sender, otherwise only the Resend account's own address gets sign-in links.

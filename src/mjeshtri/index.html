@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paneli i mjeshtrit | Rregullo</title>
+<meta name="description" content="Hyr në panelin tënd të Rregullos me numrin e telefonit. Të dërgojmë një kod me SMS.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16171A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/mjeshtri/mjeshtri.css?v={{APP_CSS_HASH}}">
+<script type="module" src="/mjeshtri/mjeshtri.js?v={{APP_JS_HASH}}"></script>
+</head>
+<body class="pro-page">
+<a class="skip" href="#main">Kalo te përmbajtja</a>
+
+<header class="top">
+  <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
+    <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
+  </a>
+  <span class="status">Për mjeshtër</span>
+</header>
+
+<main id="main" class="pro-shell">
+  <p class="pro-loading" data-view="loading">Po hapet…</p>
+
+  <!-- Sign-in, step 1: the phone number -->
+  <section class="pro-card" data-view="phone" hidden aria-labelledby="phone-title">
+    <p class="eyebrow">Paneli i mjeshtrit</p>
+    <h1 class="pro-title" id="phone-title" tabindex="-1">Hyr me numrin e telefonit</h1>
+    <p class="pro-text">Të dërgojmë një kod me SMS. S’ka fjalëkalim për me mbajtë mend, dhe mbetesh i kyçur 90 ditë në këtë telefon.</p>
+    <p class="form-error" id="signed-out-note" role="status" hidden></p>
+    <form class="pro-form" id="phone-form" novalidate>
+      <label class="pro-label" for="phone">Numri i telefonit</label>
+      <input class="field-input" id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+        placeholder="044 123 456" maxlength="20" required aria-describedby="phone-hint phone-error">
+      <p class="pro-hint" id="phone-hint">Vetëm numra mobil të Kosovës (+383).</p>
+      <p class="field-error" id="phone-error" hidden></p>
+      <!-- @if turnstile -->
+      <div class="pro-human cf-turnstile" data-sitekey="{{TURNSTILE_SITE_KEY}}" data-theme="dark" data-size="flexible"></div>
+      <!-- @endif -->
+      <p class="form-error" id="phone-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Më dërgo kodin</span>
+      </button>
+    </form>
+    <p class="pro-hint pro-privacy">Numrin e përdorim për hyrje dhe, pasi të aprovohet profili yt, që klientët të të thërrasin. <a href="/privatesia#mjeshtrit">Njoftimi për privatësi</a></p>
+  </section>
+
+  <!-- Sign-in, step 2: the code from the SMS -->
+  <section class="pro-card" data-view="code" hidden aria-labelledby="code-title">
+    <p class="eyebrow">Paneli i mjeshtrit</p>
+    <h1 class="pro-title" id="code-title" tabindex="-1">Shkruaje kodin</h1>
+    <p class="pro-text">Ta dërguam një kod me 6 shifra në <strong id="code-phone"></strong>. Vlen 10 minuta.</p>
+    <p class="pro-dev" id="dev-code" hidden></p>
+    <form class="pro-form" id="code-form" novalidate>
+      <label class="pro-label" for="code">Kodi nga SMS-i</label>
+      <input class="field-input pro-code" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+        pattern="[0-9]*" maxlength="6" placeholder="••••••" required aria-describedby="code-error">
+      <p class="field-error" id="code-error" hidden></p>
+      <p class="form-error" id="code-form-error" role="alert" hidden></p>
+      <button class="btn btn-primary pro-submit" type="submit">
+        <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Hyr</span>
+      </button>
+    </form>
+    <p class="pro-links">
+      <button class="pro-link" type="button" data-action="change-number">Ndrysho numrin</button>
+      <button class="pro-link" type="button" data-action="resend" disabled>Dërgo kodin prapë</button>
+    </p>
+  </section>
+
+  <!-- Signed in: the dashboard -->
+  <div class="app" data-view="app" hidden>
+    <nav class="app-nav" aria-label="Paneli">
+      <a class="app-tab" href="#ballina" data-tab="ballina">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-ballina"/></svg><span>Ballina</span>
+      </a>
+      <a class="app-tab" href="#profili" data-tab="profili">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-profili"/></svg><span>Profili</span>
+        <span class="tab-dot" id="profili-dot" aria-hidden="true" hidden></span><span class="visually-hidden" id="profili-unsaved" hidden>, ka ndryshime të paruajtura</span>
+      </a>
+      <a class="app-tab" href="#foto" data-tab="foto">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-foto"/></svg><span>Foto</span>
+      </a>
+      <a class="app-tab" href="#llogaria" data-tab="llogaria">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#ic-llogaria"/></svg><span>Llogaria</span>
+      </a>
+    </nav>
+
+    <!-- Ballina -->
+    <section class="app-section" data-section="ballina" hidden aria-labelledby="ballina-title">
+      <p class="eyebrow">Paneli i mjeshtrit</p>
+      <h1 class="pro-title" id="ballina-title" tabindex="-1">Mirë se erdhe!</h1>
+
+      <div class="state-card" id="state-card" data-state="draft">
+        <p class="state-title" id="state-title"></p>
+        <p class="state-text" id="state-text"></p>
+        <p class="state-note" id="state-note" hidden><span class="state-note-label">Arsyeja:</span> <span id="state-note-text"></span></p>
+      </div>
+
+      <p class="public-link" id="public-link" hidden>Klientët të gjejnë këtu: <a id="public-link-a" href="/"></a></p>
+
+      <div class="switch-row">
+        <div class="switch-copy">
+          <p class="switch-label" id="available-label">Marr punë tani</p>
+          <p class="switch-hint" id="available-hint"></p>
+        </div>
+        <button class="switch" type="button" role="switch" id="available" aria-checked="true" aria-labelledby="available-label" aria-describedby="available-hint">
+          <span class="switch-knob" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <section class="panel" id="checklist" aria-labelledby="checklist-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="checklist-title">Profili yt</h2>
+          <p class="panel-meta"><span id="checklist-percent">0</span>% i plotë</p>
+        </div>
+        <div class="meter" aria-hidden="true"><span class="meter-fill" id="checklist-meter"></span></div>
+        <h3 class="checklist-group">Për ta dërguar për shqyrtim</h3>
+        <ul class="checklist" id="checklist-required"></ul>
+        <h3 class="checklist-group">Që klientët të të zgjedhin më lehtë</h3>
+        <ul class="checklist" id="checklist-recommended"></ul>
+        <div class="submit-box" id="submit-box">
+          <p class="form-error" id="submit-error" role="alert" hidden></p>
+          <button class="btn btn-primary pro-submit" type="button" id="submit">
+            <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Dërgo për shqyrtim</span>
+          </button>
+          <p class="pro-hint submit-hint">Ekipi i Rregullos e shikon profilin para se ta shohin klientët.</p>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="stats-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="stats-title">30 ditët e fundit</h2>
+        </div>
+        <dl class="stats">
+          <div class="stat"><dt>Thirrje</dt><dd id="stat-calls">0</dd></div>
+          <div class="stat"><dt>WhatsApp</dt><dd id="stat-whatsapp">0</dd></div>
+          <div class="stat"><dt>Viber</dt><dd id="stat-viber">0</dd></div>
+          <div class="stat"><dt>Shikime të profilit</dt><dd id="stat-views">0</dd></div>
+          <div class="stat"><dt>Vlerësimi mesatar</dt><dd id="stat-rating">–</dd></div>
+          <div class="stat"><dt>Vlerësime të reja</dt><dd id="stat-reviews">0</dd></div>
+        </dl>
+        <p class="pro-hint stats-note" id="stats-note">Numrat rriten kur klientët ta gjejnë profilin tënd në Rregullo dhe të të thërrasin.</p>
+      </section>
+
+      <div class="panel-ad" id="offer" data-ad-slot="paneli" data-ad-manual hidden></div>
+
+      <section class="panel" id="reviews" aria-labelledby="reviews-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="reviews-title" tabindex="-1">Vlerësimet e klientëve</h2>
+          <p class="panel-meta" id="reviews-meta"></p>
+        </div>
+        <p class="pro-hint">Vetëm klientët që të thirrën nga Rregullo mund të të vlerësojnë, dhe çdo vlerësim konfirmohet me email. Çdo vlerësimi mund t'i përgjigjesh një herë, publikisht. Nëse një vlerësim është i rremë ose fyes, raportoje dhe ekipi e shikon.</p>
+        <ol class="review-list" id="review-list"></ol>
+        <p class="pro-hint" id="reviews-empty">Ende asnjë vlerësim.</p>
+      </section>
+    </section>
+
+    <!-- Profili -->
+    <section class="app-section" data-section="profili" hidden aria-labelledby="profili-title">
+      <p class="eyebrow">Paneli i mjeshtrit</p>
+      <h1 class="pro-title" id="profili-title" tabindex="-1">Profili yt</h1>
+      <p class="pro-text">Kështu të gjejnë dhe të njohin klientët. Mund ta ndryshosh kur të duash.</p>
+
+      <form class="pro-form profile-form" id="profile-form" novalidate>
+        <div class="field">
+          <label class="pro-label" for="f-name">Emri që shohin klientët</label>
+          <input class="field-input" id="f-name" name="name" type="text" maxlength="60" autocomplete="name" autocapitalize="words"
+            aria-describedby="f-name-hint f-name-error">
+          <p class="pro-hint" id="f-name-hint">Emri yt ose i firmës, p.sh. Arben Krasniqi ose Hidro Arbeni.</p>
+          <p class="field-error" id="f-name-error" hidden></p>
+        </div>
+
+        <fieldset class="field" id="f-trades" aria-describedby="f-trades-hint f-trades-error">
+          <legend class="pro-label">Çfarë pune bën?</legend>
+          <p class="pro-hint" id="f-trades-hint">Zgjidh deri në 5. <span class="count" id="f-trades-count">0 nga 5</span></p>
+          <div class="chips" id="f-trades-list"></div>
+          <p class="field-error" id="f-trades-error" hidden></p>
+        </fieldset>
+
+        <fieldset class="field" id="f-towns" aria-describedby="f-towns-hint f-towns-error">
+          <legend class="pro-label">Ku punon?</legend>
+          <p class="pro-hint" id="f-towns-hint">Zgjidh deri në 10 komuna. <span class="count" id="f-towns-count">0 nga 10</span></p>
+          <div class="chips chips-selected" id="f-towns-selected"></div>
+          <label class="visually-hidden" for="f-towns-filter">Kërko komunën</label>
+          <input class="field-input town-filter" id="f-towns-filter" type="search" placeholder="Kërko komunën" autocomplete="off" enterkeyhint="search">
+          <div class="town-list" id="f-towns-list"></div>
+          <p class="pro-hint" id="f-towns-empty" hidden>Asnjë komunë me këtë emër.</p>
+          <p class="field-error" id="f-towns-error" hidden></p>
+        </fieldset>
+
+        <div class="field">
+          <label class="pro-label" for="f-about">Për punën tënde</label>
+          <textarea class="field-input field-area" id="f-about" name="about" maxlength="600" rows="5"
+            aria-describedby="f-about-hint f-about-count f-about-error"></textarea>
+          <p class="pro-hint field-row-hint"><span id="f-about-hint">Çfarë bën, me çfarë materialesh, a vjen edhe në fundjavë.</span>
+            <span class="count" id="f-about-count">0/600</span></p>
+          <p class="field-error" id="f-about-error" hidden></p>
+        </div>
+
+        <div class="field-pair">
+          <div class="field">
+            <label class="pro-label" for="f-years">Vite përvojë</label>
+            <input class="field-input" id="f-years" name="years" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2"
+              aria-describedby="f-years-hint f-years-error">
+            <p class="pro-hint" id="f-years-hint">Jo e detyrueshme.</p>
+            <p class="field-error" id="f-years-error" hidden></p>
+          </div>
+          <div class="field">
+            <label class="pro-label" for="f-price">Çmimi</label>
+            <input class="field-input" id="f-price" name="priceNote" type="text" maxlength="60" placeholder="p.sh. nga 20 € / orë"
+              aria-describedby="f-price-hint f-price-error">
+            <p class="pro-hint" id="f-price-hint">Jo i detyrueshëm. Pa çmim, klientët pyesin në telefon.</p>
+            <p class="field-error" id="f-price-error" hidden></p>
+          </div>
+        </div>
+
+        <fieldset class="field">
+          <legend class="pro-label">Si të kontaktojnë klientët</legend>
+          <p class="pro-hint">Klientët të thërrasin në <strong class="phone-text" data-phone></strong>. A të shkruajnë edhe këtu?</p>
+          <label class="toggle-row">
+            <span class="toggle-copy">WhatsApp</span>
+            <input class="toggle" type="checkbox" role="switch" id="f-whatsapp" name="whatsapp">
+          </label>
+          <label class="toggle-row">
+            <span class="toggle-copy">Viber</span>
+            <input class="toggle" type="checkbox" role="switch" id="f-viber" name="viber">
+          </label>
+        </fieldset>
+
+        <p class="form-error" id="profile-error" role="alert" hidden></p>
+        <div class="save-bar" id="save-bar">
+          <p class="save-state" id="save-state" role="status"></p>
+          <button class="btn btn-primary save-button" type="submit" id="save">
+            <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Ruaj ndryshimet</span>
+          </button>
+        </div>
+      </form>
+
+      <section class="panel preview" aria-labelledby="preview-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="preview-title">Si të shohin klientët</h2>
+        </div>
+        <p class="pro-hint">Parapamje nga ajo që ke shkruar. Butonat punojnë vetëm te klientët.</p>
+        <article class="pro-preview" aria-label="Parapamja e profilit">
+          <div class="pp-head">
+            <div class="pp-photo" id="pp-photo"><span class="pp-initials" id="pp-initials" aria-hidden="true"></span></div>
+            <div class="pp-who">
+              <p class="pp-name" id="pp-name"></p>
+              <p class="pp-trades" id="pp-trades"></p>
+              <p class="pp-rating">Ende pa vlerësime</p>
+            </div>
+          </div>
+          <p class="pp-available" id="pp-available"></p>
+          <ul class="pp-facts">
+            <li id="pp-towns"></li>
+            <li id="pp-years" hidden></li>
+            <li id="pp-price" hidden></li>
+          </ul>
+          <p class="pp-about" id="pp-about" hidden></p>
+          <div class="pp-actions" aria-hidden="true">
+            <span class="pp-btn pp-btn-call">Thirre</span>
+            <span class="pp-btn" id="pp-whatsapp" hidden>WhatsApp</span>
+            <span class="pp-btn" id="pp-viber" hidden>Viber</span>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <!-- Foto -->
+    <section class="app-section" data-section="foto" hidden aria-labelledby="foto-title">
+      <p class="eyebrow">Paneli i mjeshtrit</p>
+      <h1 class="pro-title" id="foto-title" tabindex="-1">Fotot</h1>
+      <p class="pro-text">Fotot e punëve të mira bindin klientët më shumë se çdo fjalë.</p>
+      <p class="form-error" id="photos-off" hidden>Fotot nuk mund të ngarkohen ende. Provo përsëri më vonë.</p>
+
+      <section class="panel" aria-labelledby="avatar-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="avatar-title">Foto e profilit</h2>
+        </div>
+        <div class="avatar-row">
+          <div class="avatar" id="avatar"><span class="pp-initials" id="avatar-initials" aria-hidden="true"></span></div>
+          <div class="avatar-copy">
+            <p class="pro-hint">Një foto e qartë e fytyrës tënde ose logoja e firmës.</p>
+            <input class="visually-hidden photo-input" type="file" id="avatar-input" accept="image/*">
+            <label class="btn btn-ghost photo-pick" for="avatar-input" id="avatar-pick">Zgjidh foton</label>
+            <p class="photo-status"><span id="avatar-status" role="status"></span><span id="avatar-progress" aria-hidden="true"></span></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="work-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="work-title" tabindex="-1">Fotot e punëve</h2>
+          <p class="panel-meta"><span id="work-count">0</span> nga 12</p>
+        </div>
+        <p class="pro-hint">Foto me dritë dite të punëve që i ke përfunduar. Mos fotografo njerëz pa leje. Prek një foto për ta lëvizur ose fshirë.</p>
+        <ul class="work-grid" id="work-grid"></ul>
+        <input class="visually-hidden photo-input" type="file" id="work-input" accept="image/*" multiple>
+        <label class="btn btn-ghost photo-pick" for="work-input" id="work-pick">Shto foto</label>
+        <p class="photo-status" id="work-status" role="status"></p>
+      </section>
+    </section>
+
+    <!-- Llogaria -->
+    <section class="app-section" data-section="llogaria" hidden aria-labelledby="llogaria-title">
+      <p class="eyebrow">Paneli i mjeshtrit</p>
+      <h1 class="pro-title" id="llogaria-title" tabindex="-1">Llogaria</h1>
+
+      <section class="panel" aria-labelledby="number-title">
+        <h2 class="panel-title" id="number-title">Numri yt</h2>
+        <p class="account-phone" data-phone></p>
+        <p class="pro-hint">Me këtë numër hyn në panel. Në këtë numër të thërrasin dhe të shkruajnë klientët. Numri nuk ndryshohet dot nga këtu.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="signout-title">
+        <h2 class="panel-title" id="signout-title">Dalja</h2>
+        <p class="pro-hint">Në këtë telefon mbetesh i kyçur 90 ditë. Ke hyrë në një telefon që s’e ke më, ose në telefonin e dikujt tjetër? Dil nga të gjitha.</p>
+        <div class="account-actions">
+          <button class="btn btn-ghost" type="button" data-action="signout">Dil</button>
+          <button class="btn btn-ghost" type="button" data-action="signout-all">Dil nga të gjitha pajisjet</button>
+        </div>
+        <p class="form-error" id="signout-error" role="alert" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="privacy-title">
+        <h2 class="panel-title" id="privacy-title">Të dhënat e tua</h2>
+        <p class="pro-hint">Ruajmë vetëm atë që sheh këtu: numrin tënd, profilin, fotot dhe sa herë të kanë kontaktuar klientët. <a href="/privatesia#mjeshtrit">Si i ruajmë të dhënat</a></p>
+      </section>
+
+      <section class="panel panel-danger" aria-labelledby="delete-title">
+        <h2 class="panel-title" id="delete-title">Fshije llogarinë</h2>
+        <p class="pro-hint" id="delete-text">Profili, fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë. Mund të hysh prapë më vonë, por fillon nga e para.</p>
+        <p class="pro-hint" id="delete-pause">Do vetëm të pushosh pak? Fike «Marr punë tani» në Ballinë.</p>
+        <button class="btn btn-danger" type="button" data-action="delete-open">Fshije llogarinë</button>
+      </section>
+    </section>
+  </div>
+</main>
+
+<!-- Dialog: one work photo, to move or delete it -->
+<dialog class="sheet" id="photo-sheet" aria-labelledby="photo-sheet-title">
+  <h2 class="sheet-title" id="photo-sheet-title">Foto <span id="photo-sheet-n"></span> nga <span id="photo-sheet-total"></span></h2>
+  <img class="sheet-photo" id="photo-sheet-img" alt="">
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" type="button" data-photo="first">Bëje të parën</button>
+    <button class="btn btn-ghost" type="button" data-photo="left">Lëvize para</button>
+    <button class="btn btn-ghost" type="button" data-photo="right">Lëvize pas</button>
+    <button class="btn btn-danger" type="button" data-photo="delete">Fshije foton</button>
+  </div>
+  <div class="sheet-confirm" id="photo-sheet-confirm" hidden>
+    <p class="sheet-text" id="photo-sheet-question">Ta fshijmë këtë foto?</p>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" type="button" data-photo="keep">Jo, mbaje</button>
+      <button class="btn btn-danger" type="button" data-photo="delete-yes">Po, fshije</button>
+    </div>
+  </div>
+  <p class="visually-hidden" id="photo-sheet-status" role="status"></p>
+  <p class="form-error" id="photo-sheet-error" role="alert" hidden></p>
+  <button class="btn sheet-close" type="button" data-photo="close">Mbyll</button>
+</dialog>
+
+<!-- Dialog: delete the account -->
+<dialog class="sheet" id="delete-sheet" aria-labelledby="delete-sheet-title" aria-describedby="delete-sheet-text">
+  <h2 class="sheet-title" id="delete-sheet-title">Ta fshijmë llogarinë?</h2>
+  <p class="sheet-text" id="delete-sheet-text">Profili, të gjitha fotot dhe numri i thirrjeve e shikimeve fshihen përgjithmonë, dhe del nga çdo telefon. Klientët nuk të gjejnë më. Kjo nuk kthehet mbrapsht.</p>
+  <label class="consent">
+    <input class="consent-box" type="checkbox" id="delete-confirm">
+    <span class="consent-label">Po, dua ta fshij llogarinë dhe gjithçka në të.</span>
+  </label>
+  <p class="form-error" id="delete-error" role="alert" hidden></p>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" type="button" data-action="delete-cancel">Anulo</button>
+    <button class="btn btn-danger" type="button" id="delete-go" disabled>
+      <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Fshije përgjithmonë</span>
+    </button>
+  </div>
+</dialog>
+
+<!-- Dialog: sign out on every phone -->
+<dialog class="sheet" id="signout-sheet" aria-labelledby="signout-sheet-title" aria-describedby="signout-sheet-text">
+  <h2 class="sheet-title" id="signout-sheet-title">Të dalim nga të gjitha pajisjet?</h2>
+  <p class="sheet-text" id="signout-sheet-text">Do të dalësh nga çdo telefon dhe kompjuter ku ke hyrë, edhe nga ky. Për të hyrë prapë të duhet një kod i ri me SMS.</p>
+  <p class="form-error" id="signout-sheet-error" role="alert" hidden></p>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" type="button" data-action="signout-all-cancel" autofocus>Anulo</button>
+    <button class="btn btn-danger" type="button" id="signout-all-go">
+      <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Po, dil nga të gjitha</span>
+    </button>
+  </div>
+</dialog>
+
+<p class="toast" id="toast" role="status" aria-live="polite"></p>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="ic-ballina" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7V20a1 1 0 0 1-1 1H15v-6.5H9V21H4.5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-profili" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 21c.6-4.2 3.9-7 8-7s7.4 2.8 8 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="ic-foto" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.8" fill="currentColor"/><path d="m4 18 5.5-5 4 3.5 2.5-2 4 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="ic-llogaria" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="11" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.8 16.2c.5-1.6 1.7-2.4 3.2-2.4s2.7.8 3.2 2.4M14.5 10h3.5M14.5 13.5h3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+</svg>
+<!-- @sprite -->
+</body>
+</html>

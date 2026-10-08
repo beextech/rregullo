@@ -1,0 +1,161 @@
+/* The public directory: /kerko, the /m/ profiles, /thirrjet, and the search box on the homepage. On top of site.css. */
+
+.dir-top { padding-bottom: 4px; }
+.dir-nav { display: flex; gap: 4px; }
+.dir-nav a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 999px;
+  color: var(--soft); font-size: 15px; font-weight: 500; text-decoration: none;
+}
+.dir-nav a:hover { color: var(--paper); background: rgba(241, 242, 239, .06); }
+.dir-nav a[aria-current="page"] { color: var(--paper); background: rgba(241, 242, 239, .08); }
+@media (max-width: 420px) { .dir-nav a { padding: 0 10px; font-size: 14px; } .dir-top .logo-small { width: 108px; } }
+
+.dir-preview {
+  max-width: 760px; margin: 16px auto 0; padding: 12px 16px; border-radius: 12px;
+  background: rgba(171, 226, 63, .08); box-shadow: inset 0 0 0 1px rgba(171, 226, 63, .35); color: var(--soft); font-size: 14.5px;
+}
+@media (max-width: 800px) { .dir-preview { margin: 16px var(--gutter) 0; } }
+
+.dir { max-width: calc(760px + 2 * var(--gutter)); margin: 0 auto; padding: 28px var(--gutter) 64px; }
+.dir-title { font-size: clamp(28px, 4.4vw, 40px); line-height: 1.1; }
+.dir-h2 { font-size: 19px; line-height: 1.3; letter-spacing: -.015em; }
+
+/* The search box */
+.find { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 20px; width: 100%; }
+@media (min-width: 640px) { .find { grid-template-columns: 1fr 1fr auto; align-items: end; } }
+.find-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.find-label { color: var(--mute); font-size: 14px; font-weight: 500; padding-left: 20px; }
+.find-select {
+  appearance: none; -webkit-appearance: none; width: 100%; height: 52px; padding: 0 44px 0 20px; border: 0; border-radius: 999px;
+  background: rgba(241, 242, 239, .06) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 9.5l6 6 6-6' fill='none' stroke='%23A9ACA6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 16px center / 20px 20px;
+  color: var(--paper); box-shadow: inset 0 0 0 1px var(--line-strong);
+  font: inherit; font-size: 16px; cursor: pointer;
+}
+.find-select:hover { box-shadow: inset 0 0 0 1px rgba(241, 242, 239, .4); }
+.find-select:focus { outline: none; box-shadow: inset 0 0 0 2px var(--lime); }
+.find-select option { background: var(--ink-2); color: var(--paper); }
+.find-go { justify-content: center; }
+
+/* On the homepage the box takes the place of the launch signup. */
+.home-find { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--line); width: 100%; max-width: 540px; }
+.home-find .find { grid-template-columns: 1fr; }
+@media (min-width: 520px) { .home-find .find { grid-template-columns: 1fr 1fr; } .home-find .find-go { grid-column: 1 / -1; } }
+.home-find-links { margin-top: 16px; color: var(--mute); font-size: 14.5px; }
+.home-find-links a { color: var(--paper); text-decoration-color: rgba(241, 242, 239, .4); text-underline-offset: 3px; }
+
+/* Results */
+.dir-results { margin-top: 32px; }
+.dir-count { color: var(--mute); font-size: 15px; }
+.dir-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.dir-card { padding: 18px; border-radius: 20px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.dir-card-main { display: flex; gap: 14px; align-items: flex-start; color: inherit; text-decoration: none; border-radius: 12px; }
+.dir-card-main:hover .dir-name { text-decoration: underline; text-decoration-color: var(--lime); text-underline-offset: 3px; }
+.dir-card-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dir-name { font-weight: 700; font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.dir-trades { color: var(--soft); font-size: 15px; }
+.dir-facts, .dir-price { color: var(--mute); font-size: 14.5px; overflow-wrap: anywhere; }
+.dir-badge {
+  display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; vertical-align: 2px;
+  background: rgba(171, 226, 63, .14); color: var(--lime); font-size: 12.5px; font-weight: 700; letter-spacing: .02em; white-space: nowrap;
+}
+
+.dir-avatar {
+  flex: none; position: relative; width: 64px; height: 64px; border-radius: 50%; overflow: hidden;
+  display: grid; place-items: center; background: rgba(171, 226, 63, .14); color: var(--lime); font-weight: 700; font-size: 22px;
+}
+.dir-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dir-avatar-big { width: 96px; height: 96px; font-size: 32px; }
+
+.dir-avail { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--soft); font-size: 14.5px; }
+.dir-avail::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 3px rgba(171, 226, 63, .16); }
+.dir-avail.is-off { color: var(--mute); }
+.dir-avail.is-off::before { background: var(--mute); box-shadow: none; }
+
+.dir-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.dir-act { flex: 1 1 0; justify-content: center; min-height: 48px; padding: 0 18px; font-weight: 600; }
+.dir-actions-big .dir-act { min-height: 56px; font-size: 17px; }
+.dir-ghost { background: transparent; color: var(--paper); box-shadow: inset 0 0 0 1px var(--line-strong); justify-content: center; }
+.dir-ghost:hover { background: rgba(241, 242, 239, .06); box-shadow: inset 0 0 0 1px rgba(171, 226, 63, .55); }
+
+.dir-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; }
+.dir-pager-at { color: var(--mute); font-size: 14.5px; }
+
+.dir-empty { padding: 24px; border-radius: 20px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--mute); }
+.dir-empty-title { color: var(--paper); font-weight: 700; font-size: 18px; margin-bottom: 6px; }
+.dir-tries { margin: 14px 0 0; padding-left: 20px; }
+.dir-tries li + li { margin-top: 6px; }
+.dir-tries a, .dir-back a, .dir-foot a, .dir-empty a { color: var(--paper); text-decoration-color: rgba(241, 242, 239, .4); text-underline-offset: 3px; }
+
+/* A profile */
+.dir-back { font-size: 15px; margin-bottom: 20px; }
+.dir-back a { color: var(--soft); }
+.dir-profile-head { display: flex; align-items: center; gap: 18px; }
+.dir-profile-name { font-size: clamp(26px, 4vw, 34px); line-height: 1.12; overflow-wrap: anywhere; }
+.dir-profile-head .dir-trades { margin-top: 4px; font-size: 16px; }
+.dir-rating { margin-top: 2px; color: var(--mute); font-size: 14px; }
+.dir-phone { margin-top: 10px; color: var(--mute); font-size: 15px; font-variant-numeric: tabular-nums; }
+.dir-profile-facts { list-style: none; margin: 20px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); color: var(--soft); font-size: 15.5px; }
+.dir-profile-facts li + li { margin-top: 6px; }
+.dir-section { margin-top: 28px; }
+.dir-about { margin-top: 10px; color: var(--soft); overflow-wrap: anywhere; }
+.dir-about p + p { margin-top: 12px; }
+.dir-work { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.dir-work a { display: block; border-radius: 12px; overflow: hidden; aspect-ratio: 1; background: var(--ink-2); }
+.dir-work img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Thirrjet e mia */
+.calls-text { margin-top: 10px; color: var(--mute); max-width: 52ch; }
+.calls-list { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 12px; }
+.calls-item { padding: 18px; border-radius: 20px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.calls-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.calls-name { font-weight: 700; font-size: 18px; color: var(--paper); text-decoration: none; overflow-wrap: anywhere; }
+.calls-name:hover { text-decoration: underline; text-decoration-color: var(--lime); text-underline-offset: 3px; }
+.calls-when { color: var(--mute); font-size: 14px; white-space: nowrap; }
+.calls-remove { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--mute); font: inherit; font-size: 14.5px; cursor: pointer; }
+.calls-remove:hover { color: var(--paper); background: rgba(241, 242, 239, .06); }
+.calls-clear { margin-top: 24px; border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+.calls-empty { margin-top: 24px; }
+
+.dir-foot { max-width: calc(760px + 2 * var(--gutter)); margin: 0 auto; padding: 24px var(--gutter) max(32px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--mute); font-size: 14px; }
+
+/* Stars and reviews */
+.dir-stars { color: var(--soft); font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.dir-stars > span[aria-hidden] { color: var(--lime); }
+.dir-stars-big { font-size: 15px; }
+.dir-h2-meta { margin-left: 6px; color: var(--mute); font-size: 15px; font-weight: 500; letter-spacing: 0; }
+.dir-reviews-note, .dir-reviews-none { margin-top: 8px; color: var(--mute); font-size: 14.5px; }
+.dir-reviews { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+.dir-review { padding: 16px 18px; border-radius: 16px; background: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.dir-review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.dir-review-stars { color: var(--lime); letter-spacing: .08em; }
+.dir-review-who { color: var(--mute); font-size: 14px; }
+.dir-review-text { margin-top: 8px; color: var(--soft); overflow-wrap: anywhere; }
+.dir-review-text p + p, .dir-review-reply p + p { margin-top: 8px; }
+.dir-review-reply { margin-top: 12px; padding: 12px 14px; border-left: 2px solid var(--lime); border-radius: 0 10px 10px 0; background: rgba(241, 242, 239, .04); color: var(--soft); font-size: 15px; overflow-wrap: anywhere; }
+.dir-review-reply-who { color: var(--paper); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+
+/* "Si shkoi?" in Thirrjet e mia */
+.rate { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rate-title { font-weight: 700; font-size: 16px; }
+.rate-hint { margin-top: 4px; color: var(--mute); font-size: 14px; }
+.rate-stars { display: flex; gap: 4px; margin-top: 10px; border: 0; padding: 0; }
+.rate-stars legend { padding: 0; margin-bottom: 6px; color: var(--mute); font-size: 14px; }
+.rate-star { position: relative; }
+.rate-star input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rate-star span { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; color: var(--mute); font-size: 26px; cursor: pointer; }
+.rate-star input:checked ~ span, .rate-star.is-lit span { color: var(--lime); }
+.rate-star input:focus-visible ~ span { outline: 2px solid var(--lime); outline-offset: 1px; }
+.rate-field { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.rate-field label { color: var(--mute); font-size: 14px; font-weight: 500; }
+.rate-input, .rate-text {
+  width: 100%; padding: 12px 16px; border: 0; border-radius: 14px; background: rgba(241, 242, 239, .06); color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line-strong); font: inherit; font-size: 16px;
+}
+.rate-text { min-height: 96px; resize: vertical; }
+.rate-input:focus, .rate-text:focus { outline: none; box-shadow: inset 0 0 0 2px var(--lime); }
+.rate-input[aria-invalid="true"], .rate-text[aria-invalid="true"] { box-shadow: inset 0 0 0 2px #FF8A7A; }
+.rate-note { margin-top: 10px; color: var(--mute); font-size: 13.5px; }
+.rate-note a { color: var(--paper); text-underline-offset: 3px; }
+.rate-send { margin-top: 14px; width: 100%; justify-content: center; }
+.rate-done { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(171, 226, 63, .08); box-shadow: inset 0 0 0 1px rgba(171, 226, 63, .35); color: var(--soft); font-size: 14.5px; }
+.rate-wait { margin-top: 12px; color: var(--mute); font-size: 14px; }

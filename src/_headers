@@ -5,6 +5,33 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
   Content-Security-Policy: default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; manifest-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
 
+# The mjeshtër panel also loads Cloudflare Turnstile (the bot check before an SMS is sent), and previews photos
+# from blob: URLs while they upload.
+/mjeshtri/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; font-src 'self'; manifest-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Cache-Control: no-cache
+
+# The team admin: like the mjeshtër panel without Turnstile, and never indexed.
+/admin/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; manifest-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex
+
+# "Thirrjet e mia" lives only in the visitor's browser; nothing to index.
+/thirrjet/*
+  X-Robots-Tag: noindex
+  Cache-Control: no-cache
+
+# The directory's stylesheet and script are always linked with ?v=<hash>.
+/kerko/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The ads script is imported without a version by several pages, so it is always checked.
+/reklama.js
+  Cache-Control: no-cache
+
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 

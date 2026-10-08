@@ -20,12 +20,12 @@ directory = "dist"
 binding = "ASSETS"
 not_found_handling = "404-page"
 # These paths always reach the Worker, even if a static file with the same name ever appears.
-run_worker_first = ["/api/*", "/konfirmo", "/konfirmo/", "/cregjistrohu", "/cregjistrohu/"]
+run_worker_first = ["/api/*", "/foto/*", "/konfirmo", "/konfirmo/", "/cregjistrohu", "/cregjistrohu/", "/kerko", "/kerko/", "/m/*", "/sitemap.xml", "/vleresimi", "/vleresimi/", "/r/*"]
 
 [observability]
 enabled = true
 
-# Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL) are set with
+# Non-secret settings. Secrets (APP_SECRET, RESEND_API_KEY, LAUNCH_NOTIFICATION_EMAIL, and the SMS/Turnstile ones) are set with
 # `wrangler secret put` or in the dashboard, never here.
 [vars]
 # The public address every email link points at. `npm run deploy:auto` sets it to the workers.dev URL.
@@ -36,6 +36,13 @@ EMAIL_FROM = "Rregullo <onboarding@resend.dev>"
 # 'all': the team hears about every signup request and every confirmation. 'confirmed': confirmations only.
 # The recipient (LAUNCH_NOTIFICATION_EMAIL) is set as a secret, not here, so it never lands in Git.
 LAUNCH_NOTIFY_ON = "all"
+# The sender name on mjeshtër sign-in SMS (an alphanumeric sender ID registered with Twilio, a Twilio number, or a
+# Messaging Service SID starting with MG). Secrets TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TURNSTILE_SECRET_KEY are
+# set with `wrangler secret put`.
+SMS_FROM = "Rregullo"
+# The public directory (/kerko and the /m/ profiles) and the homepage's search box. "0": coming soon for the public,
+# while the signed-in team can already look at it. Set "1" to open it; the next deploy switches the homepage too.
+DIRECTORY_OPEN = "0"
 
 [[d1_databases]]
 binding = "DB"
@@ -43,3 +50,19 @@ database_name = "rregullo-launch"
 # rregullo-launch (weur). `npm run deploy:auto` keeps this in sync.
 database_id = "ba8344e4-92f6-4d54-b9cd-e39c6e847caf"
 migrations_dir = "migrations"
+
+# Mjeshtër and ad photos. R2 is their real home, but turning R2 on needs a payment card, so until then they're kept
+# in Workers KV (free, no card). The first deploy creates this namespace by itself (it has no id on purpose).
+[[kv_namespaces]]
+binding = "PHOTOS_KV"
+
+# Once R2 is enabled (dashboard > R2), add this back: new photos then go to R2 and the ones already in KV keep working.
+# [[r2_buckets]]
+# binding = "PHOTOS"
+# bucket_name = "rregullo-foto"
+
+# Worker Previews: Cloudflare's builds for branches other than main run `npx wrangler preview`, which needs this
+# block. Previews don't inherit the settings above, and this block deliberately gives them no database, photo storage,
+# variables or secrets: a preview shows the pages, while the signup and the mjeshtër sign-in answer with an error there
+# instead of touching the real list. With `preview_urls = false` above, previews get no public URL either.
+[previews]

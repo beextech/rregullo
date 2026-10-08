@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thirrjet e mia | Rregullo</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#16171A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="/fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/site.css?v={{CSS_HASH}}">
+<link rel="stylesheet" href="/kerko/kerko.css?v={{DIR_CSS_HASH}}">
+<script type="module" src="/kerko/kerko.js?v={{DIR_JS_HASH}}"></script>
+</head>
+<body>
+<a class="skip" href="#main">Kalo te përmbajtja</a>
+
+<header class="top dir-top">
+  <a class="top-brand" href="/" aria-label="Rregullo, faqja kryesore">
+    <svg class="logo-small" viewBox="0 0 714 226" aria-hidden="true" focusable="false"><use href="#rg-logo-small"/></svg>
+  </a>
+  <nav class="dir-nav" aria-label="Lidhjet kryesore"><a href="/kerko">Kërko</a><a href="/thirrjet">Thirrjet e mia</a></nav>
+</header>
+
+<main class="dir" id="main">
+  <h1 class="dir-title" id="calls-title" tabindex="-1">Thirrjet e mia</h1>
+  <p class="calls-text">Mjeshtrit që i ke thirrur ose u ke shkruar nga Rregullo, që t’i gjesh prapë. Kjo listë ruhet vetëm në këtë telefon ose shfletues, jo te ne.</p>
+
+  <ol class="calls-list" id="calls-list" aria-labelledby="calls-title" hidden></ol>
+  <div class="dir-empty calls-empty" id="calls-empty">
+    <p class="dir-empty-title">Ende s’ke thirrur asnjë mjeshtër nga Rregullo.</p>
+    <p>Kur e thërret ose i shkruan një mjeshtri, ai del këtu.</p>
+    <p class="notice-action"><a class="btn btn-primary" href="/kerko">Kërko mjeshtër</a></p>
+  </div>
+  <p><button class="btn dir-ghost calls-clear" type="button" id="calls-clear" hidden>Fshije listën</button></p>
+  <noscript><p class="form-error">Kjo listë punon vetëm me JavaScript të ndezur.</p></noscript>
+</main>
+<footer class="dir-foot"><p>Rregullo nuk merr pagesë nga klientët dhe nuk ndërhyn në marrëveshjen tënde me mjeshtrin. <a href="/privatesia">Privatësia</a> · <a href="/kushtet">Kushtet</a></p></footer>
+<!-- @sprite -->
+</body>
+</html>

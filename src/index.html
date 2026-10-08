@@ -4,7 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rregullo | Gjej mjeshter për riparime dhe renovime në Kosovë</title>
+<!-- @if soon -->
 <meta name="description" content="Rregullo po vjen në Kosovë: gjej mjeshter për riparime, renovime, ndërtim dhe punë shtëpie. Lëre emailin dhe të lajmërojmë kur të jetë gati.">
+<!-- @endif -->
+<!-- @if directory -->
+<meta name="description" content="Gjej mjeshter në Kosovë për riparime, renovime, ndërtim dhe punë shtëpie. Zgjidh zanatin dhe komunën, shiko profilin dhe thirre direkt, pa pagesë.">
+<!-- @endif -->
 <meta name="theme-color" content="#16171A">
 <meta name="color-scheme" content="dark">
 <!-- @canonical -->
@@ -60,6 +65,10 @@
 <link rel="stylesheet" href="/teaser.css">
 <script type="module" src="/site.js?v={{JS_HASH}}"></script>
 <script type="module" src="/teaser.js"></script>
+<!-- @if directory -->
+<link rel="stylesheet" href="/kerko/kerko.css?v={{DIR_CSS_HASH}}">
+<script type="module" src="/kerko/kerko.js?v={{DIR_JS_HASH}}"></script>
+<!-- @endif -->
 </head>
 <body>
 <a class="skip" href="#main">Kalo te përmbajtja</a>
@@ -73,13 +82,24 @@
 <main id="main">
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
+<!-- @if soon -->
       <p class="eyebrow status-line"><span class="status-dot" aria-hidden="true"></span>Së shpejti në Kosovë</p>
+<!-- @endif -->
+<!-- @if directory -->
+      <p class="eyebrow status-line"><span class="status-dot" aria-hidden="true"></span>Në gjithë Kosovën</p>
+<!-- @endif -->
       <h1 id="hero-title" class="hero-title">
         <span class="hero-line">Punë të vogla, punë të mëdha.</span>
         <span class="hero-line">Mjeshtrin e&nbsp;gjen te&nbsp;Rregullo.</span>
       </h1>
+<!-- @if soon -->
       <p class="hero-text">Prej mureve që lypin ngjyrë, te shpija që don ndryshim. Rregullo po vjen për me ta lehtësu gjetjen e mjeshtrit të duhur.</p>
+<!-- @endif -->
+<!-- @if directory -->
+      <p class="hero-text">Prej mureve që lypin ngjyrë, te shpija që don ndryshim. Te Rregullo e gjen mjeshtrin e duhur dhe e thërret direkt.</p>
+<!-- @endif -->
 
+<!-- @if soon -->
       <div class="signup" id="lajmerimi">
         <h2 class="signup-title" id="signup-title">Don me qenë ndër të parët që e merr lajmin?</h2>
         <p class="signup-text" id="signup-text">Lëre emailin dhe të lajmërojmë kur Rregullo të jetë gati.</p>
@@ -110,6 +130,17 @@
           <p class="done-text">Adresa jote u ruajt. Mund të çregjistrohesh kurdo.</p>
         </div>
       </div>
+<!-- @endif -->
+<!-- @if directory -->
+      <!-- Once the directory is open (DIRECTORY_OPEN), the search box takes the launch signup's place. It keeps the id
+           "lajmerimi", so the games' "find a mjeshtër" links still land here. -->
+      <div class="home-find" id="lajmerimi" data-home-find>
+        <h2 class="signup-title" id="find-title">Gjej mjeshtrin që të duhet</h2>
+        <p class="signup-text">Zgjidh zanatin dhe komunën, shiko profilet dhe thirre direkt. Pa llogari, pa pagesë.</p>
+        <!-- @search-form -->
+        <p class="home-find-links"><a href="/thirrjet">Thirrjet e mia</a></p>
+      </div>
+<!-- @endif -->
       <div class="follow">
         <p class="follow-text" id="follow-title">Na ndiqni në rrjetet sociale</p>
         <ul class="follow-links" aria-labelledby="follow-title">
@@ -301,7 +332,12 @@
       <span>Ki diçka me rregullu?</span>
       <span>Rregullo po vjen.</span>
     </h2>
+<!-- @if soon -->
     <p class="finale-cta"><a class="btn btn-primary" href="#lajmerimi" data-to-signup>Më lajmëroni</a></p>
+<!-- @endif -->
+<!-- @if directory -->
+    <p class="finale-cta"><a class="btn btn-primary" href="/kerko">Gjej mjeshtër</a></p>
+<!-- @endif -->
     <!-- @if social -->
     <p class="finale-text">Na gjen edhe në rrjete sociale.</p>
     <ul class="social" aria-label="Rregullo në rrjetet sociale">
@@ -313,7 +349,12 @@
 
 <footer class="foot">
   <svg class="foot-o" viewBox="0 0 148 139" aria-hidden="true" focusable="false"><use href="#rg-o"/></svg>
-  <p>Rregullo · Së shpejti në Kosovë · <a href="/mjeshter">Je mjeshtër?</a> · <a href="/privatesia">Privatësia</a></p>
+<!-- @if soon -->
+  <p>Rregullo · Së shpejti në Kosovë · <a href="/mjeshter">Je mjeshtër?</a> · <a href="/privatesia">Privatësia</a> · <a href="/kushtet">Kushtet</a></p>
+<!-- @endif -->
+<!-- @if directory -->
+  <p>Rregullo · <a href="/kerko">Kërko mjeshtër</a> · <a href="/thirrjet">Thirrjet e mia</a> · <a href="/mjeshter">Je mjeshtër?</a> · <a href="/privatesia">Privatësia</a> · <a href="/kushtet">Kushtet</a></p>
+<!-- @endif -->
 </footer>
 
 <!-- Brand artwork: Rregullo identity 2.4 (01-logo, 02-symbol-o). Drawn, not typed: do not edit the paths. -->

@@ -17,3 +17,11 @@ LAUNCH_NOTIFICATION_EMAIL=
 # Local overrides (production uses the values in wrangler.toml).
 SITE_URL=http://localhost:8787
 # EMAIL_API_BASE=http://127.0.0.1:8790   # point at scripts/mock-email.mjs to test without sending real email
+
+# Mjeshtër sign-in (README, "Mjeshtër panel"). Leave all of these empty locally: the page then shows the code
+# instead of texting it. In production they are required.
+# TWILIO_ACCOUNT_SID=
+# TWILIO_AUTH_TOKEN=
+# TURNSTILE_SECRET_KEY=
+# SMS_API_BASE=http://127.0.0.1:8790          # scripts/mock-email.mjs also fakes Twilio
+# TURNSTILE_VERIFY_URL=http://127.0.0.1:8790/turnstile/v0/siteverify

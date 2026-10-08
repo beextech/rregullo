@@ -1,5 +1,6 @@
 // Mjeshtër photos: a profile photo and up to 12 work photos. The phone shrinks each photo to a JPEG before upload
-// (src/mjeshtri/photo.js); the Worker checks it really is one, keeps it in R2 (binding PHOTOS) as foto/<id>.jpg,
+// (src/mjeshtri/photo.js); the Worker checks it really is one, keeps it in R2 (binding PHOTOS, or KV until
+// R2 is turned on: server/photo-store.js) as foto/<id>.jpg,
 // and lists it in pro_photos. Photos are served at /foto/<id>.jpg: the id is a random UUID, so a photo can only be
 // found through the profile it belongs to.
 

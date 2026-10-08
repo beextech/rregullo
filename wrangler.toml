@@ -51,11 +51,15 @@ database_name = "rregullo-launch"
 database_id = "ba8344e4-92f6-4d54-b9cd-e39c6e847caf"
 migrations_dir = "migrations"
 
-# Mjeshtër photos (step 2). R2 must be enabled on the Cloudflare account (dashboard > R2); the first deploy then
-# creates the bucket by itself. Free up to 10 GB.
-[[r2_buckets]]
-binding = "PHOTOS"
-bucket_name = "rregullo-foto"
+# Mjeshtër and ad photos. R2 is their real home, but turning R2 on needs a payment card, so until then they're kept
+# in Workers KV (free, no card). The first deploy creates this namespace by itself (it has no id on purpose).
+[[kv_namespaces]]
+binding = "PHOTOS_KV"
+
+# Once R2 is enabled (dashboard > R2), add this back: new photos then go to R2 and the ones already in KV keep working.
+# [[r2_buckets]]
+# binding = "PHOTOS"
+# bucket_name = "rregullo-foto"
 
 # Worker Previews: Cloudflare's builds for branches other than main run `npx wrangler preview`, which needs this
 # block. Previews don't inherit the settings above, and this block deliberately gives them no database, photo storage,

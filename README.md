@@ -320,13 +320,13 @@ The page (`src/mjeshtri/`) has four tabs:
 | `POST /api/mjeshtri/foto/fshi` | `{ id }`: deletes a photo |
 | `POST /api/mjeshtri/foto/renditja` | `{ ids }`: the order of the work photos |
 | `POST /api/mjeshtri/fshi` | `{ confirm: 'FSHIJE' }`: deletes the account, its photos, counts and sessions |
-| `GET /foto/<id>.jpg` | A photo, straight from R2, cached for a year (a changed photo always gets a new id) |
+| `GET /foto/<id>.jpg` | A photo, straight from storage (R2, or KV until R2 is on), cached for a year (a changed photo always gets a new id) |
 
 Every POST must come from this site, as JSON (or `image/jpeg` for photos), which a page elsewhere can't send without a CORS preflight that the API never answers.
 
 Tables:
 - `migrations/0002_mjeshtrit.sql`: `pros` (one row per mjeshtër, created as `draft` at first sign-in), `sms_codes` (the current code's keyed hash and the send counters) and `sessions` (SHA-256 of each cookie token).
-- `migrations/0003_paneli.sql`: `pro_photos` (one row per photo; the image is in R2 as `foto/<id>.jpg`) and `pro_stats_daily` (counts per mjeshtër per day). Both are deleted with the mjeshtër. Never rebuild the `pros` table (only `ALTER TABLE … ADD COLUMN`): rebuilding it would delete these rows through the cascade.
+- `migrations/0003_paneli.sql`: `pro_photos` (one row per photo; the image is in R2, or KV until R2 is on, as `foto/<id>.jpg`) and `pro_stats_daily` (counts per mjeshtër per day). Both are deleted with the mjeshtër. Never rebuild the `pros` table (only `ALTER TABLE … ADD COLUMN`): rebuilding it would delete these rows through the cascade.
 
 Trades and municipalities are in `src/mjeshtri/catalog.js`.
 
@@ -344,7 +344,7 @@ Trades and municipalities are in `src/mjeshtri/catalog.js`.
 **Privacy.** The "Paneli i mjeshtrit" part of the privacy notice (`/privatesia#mjeshtrit`, linked from the sign-in screen and from Llogaria) lists what the panel stores, how long, and who processes it (Cloudflare, Twilio). If you change `SIGNIN` in `server/signin.js`, the photo rules or the tables, change the notice too.
 
 **Setup before it goes live**
-1. **R2 (photo storage):** Cloudflare dashboard > **R2 Object Storage** > enable it (free up to 10 GB; Cloudflare asks for a card but charges nothing within the free tier). The next deploy creates the `rregullo-foto` bucket by itself. Until R2 is enabled, deploys of this version fail and the live site stays on the previous version.
+1. **Photo storage:** until R2 is enabled, photos are kept in Workers KV (binding `PHOTOS_KV`, `server/photo-store.js`), which needs no card; the first deploy creates the namespace by itself. KV's free tier allows 1,000 uploads a day and 1 GB (about 4,000 photos). Later, enable **R2 Object Storage** in the Cloudflare dashboard (free up to 10 GB, but it asks for a card) and uncomment the `[[r2_buckets]]` block in `wrangler.toml`: new photos then go to R2, and the ones already in KV keep working.
 2. **Database tables:** `npm run db:migrate` (or `npm run deploy:auto`) applies `0002` and `0003`. They only add tables, so the live site is unaffected.
 3. **Turnstile:** Cloudflare dashboard > Turnstile > Add widget for `rregullo.net` (managed mode). Put the **site key** in `site.config.json` as `turnstileSiteKey` (it's public) and the **secret key** in the Worker: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
 4. **SMS (Twilio):** create the account, and check the price per SMS to Kosovo (+383) against a local gateway first. Register `Rregullo` as an alphanumeric sender ID (or buy a number, or use a Messaging Service). Then set `npx wrangler secret put TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`, and set `SMS_FROM` in `wrangler.toml` if it isn't `Rregullo`. To use another provider, replace `sendSms()` in `server/sms.js`; nothing else depends on Twilio.
@@ -352,7 +352,7 @@ Trades and municipalities are in `src/mjeshtri/catalog.js`.
 
 Pull-request previews have no database or photo storage, so the panel answers with an error there.
 
-**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`); photos are kept in a local R2 under `.wrangler/state`. `npm run test:app` runs the sign-in and dashboard checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks. They cover sessions, every endpoint's same-site and method checks, saving and validating the profile, uploads (wrong types, sizes, the 12-photo and 60-a-day limits, replacing and deleting from R2), photo caching headers, approval states, the availability switch, the 30-day counts, suspension, signing out everywhere and deleting an account. The screens were also walked through in headless Chromium at 360 px, 390 px and 1280 px.
+**Locally,** with no SMS or Turnstile settings, `npm run dev` shows the code on the page instead of texting it (only when `SITE_URL` is `http://localhost`); photos are kept in a local KV under `.wrangler/state`. `npm run test:app` runs the sign-in and dashboard checks against fake Twilio and Turnstile servers (`scripts/mock-email.mjs`); `npm test` runs them after the signup checks. They cover sessions, every endpoint's same-site and method checks, saving and validating the profile, uploads (wrong types, sizes, the 12-photo and 60-a-day limits, replacing and deleting from R2), photo caching headers, approval states, the availability switch, the 30-day counts, suspension, signing out everywhere and deleting an account. The screens were also walked through in headless Chromium at 360 px, 390 px and 1280 px.
 
 ## Team admin (/admin)
 
@@ -467,19 +467,19 @@ Table: `reviews` (`migrations/0006_vleresimet.sql`), deleted with the mjeshtër.
 
 Companies that sell repair products can advertise. Every ad is marked "Sponsorizuar · <company>", there's no payment in the platform, and no ad network or tracking script: views and clicks are counted on our own server.
 
-1. **The team** adds advertisers and their campaigns in `/admin` → Reklamat: a title, an `https://` link, an optional image (needs R2; without it the ad is a text card), the slots, the trades and towns (empty means all), start and end dates, and on/off.
+1. **The team** adds advertisers and their campaigns in `/admin` → Reklamat: a title, an `https://` link, an optional image (or a text card without one), the slots, the trades and towns (empty means all), start and end dates, and on/off.
 2. **Slots:** `kerko` (search results, after the 3rd result), `profili` (under a profile), `loja` (the games page) and `paneli` (an offer on the mjeshtër's Ballina, matched to their trades and towns). Search and profile ads are in the page itself; the other two come from `GET /api/reklama?vendi=&zanati=&komuna=` (204 when nothing fits). When several campaigns fit, one is picked at random.
 3. **Counting:** a view is counted when half the ad is on screen (`POST /api/reklama`), a click at `/r/<id>?v=<slot>`, which then sends the visitor to the link. Each counts once a day per campaign, slot and network address (stored as a keyed hash, like the rest of the site), at most 300 a day per address, only while the campaign is live, and never for the team. Days are UTC.
 4. **Report:** each advertiser's card has "Shkarko raportin (CSV)" for a month: a row per campaign, day and slot, plus totals (`GET /api/admin/raporti?reklamuesi=<id>&muaji=YYYY-MM`).
 
 Tables: `advertisers`, `campaigns`, `ad_stats_daily` (`migrations/0007_reklamat.sql`). Deleting an advertiser deletes its campaigns, images and counts.
 
-**Setup:** `npm run db:migrate` applies `0007`. Images need the R2 bucket (see the panel's photos).
+**Setup:** `npm run db:migrate` applies `0007`. Images use the same photo storage as the panel.
 
 ## Launch (step 7)
 
 - **Terms of use** are at `/kushtet` (`src/kushtet.html`), linked from every footer. The privacy notice now also covers reviews and ads.
-- **Checklist, in order:** apply migrations `0002`–`0007` → set the secrets and settings → verify `rregullo.net` in Resend → turn on R2 → sign up the first mjeshtër town by town from `/admin` → native speaker and legal review → `DIRECTORY_OPEN = "1"` and deploy → check the live site → send the launch email (see "Launch day"), only when the owner says so.
+- **Checklist, in order:** apply migrations `0002`–`0007` → set the secrets and settings → verify `rregullo.net` in Resend → sign up the first mjeshtër town by town from `/admin` → native speaker and legal review → `DIRECTORY_OPEN = "1"` and deploy → check the live site → send the launch email (see "Launch day"), only when the owner says so.
 
 ## Before launch, please also
 

@@ -3,6 +3,7 @@
 
 import { hmac, randomToken, safeEqual, sha256, uuid } from './crypto.js';
 import { log } from './subscribers.js';
+import { photoStore } from './photo-store.js';
 import { readSmsConfig, sendSms, smsConfigured } from './sms.js';
 
 const MINUTE = 60 * 1000;
@@ -39,7 +40,7 @@ export function readAppConfig(env) {
   const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(siteUrl);
   return {
     db: env.DB,
-    photos: env.PHOTOS || null,        // R2 bucket for mjeshtër photos (step 2); missing in previews
+    photos: photoStore(env),           // R2, or KV until R2 is turned on; missing in previews
     directoryOpen: env.DIRECTORY_OPEN === '1',   // the public directory (step 4) is open to everyone
     siteUrl,
     local,

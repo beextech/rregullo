@@ -15,6 +15,7 @@ import * as drejtoria from '../functions/drejtoria.js';
 import * as vleresimi from '../functions/vleresimi.js';
 import * as reklama from '../functions/reklama.js';
 import { servePhoto } from '../server/photos.js';
+import { photoStore } from '../server/photo-store.js';
 
 const ROUTES = {
   '/api/subscribe': subscribe,
@@ -78,7 +79,7 @@ export default {
     const photo = PHOTO_PATH.exec(path);
     if (photo) {
       if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
-      return servePhoto(env.PHOTOS, request, photo[1]);
+      return servePhoto(photoStore(env), request, photo[1]);
     }
     const profile = PROFILE_PATH.exec(path);
     const click = !profile && AD_CLICK_PATH.exec(path);
